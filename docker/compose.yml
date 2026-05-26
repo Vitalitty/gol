@@ -1,0 +1,33 @@
+services:
+  gol-files:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: vitalitty/gol:local
+    profiles: ["files"]
+    ports:
+      - "${GOL_PORT:-3003}:3003"
+    volumes:
+      - "${GOL_LOG_DIR:-./logs}:/logs:ro"
+    command:
+      - "--host=0.0.0.0"
+      - "--port=3003"
+      - "--open=false"
+      - "-f=/logs/${GOL_LOG_PATTERN:-*.log}"
+
+  gol-docker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: vitalitty/gol:local
+    profiles: ["docker"]
+    user: root
+    ports:
+      - "${GOL_PORT:-3003}:3003"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    command:
+      - "--host=0.0.0.0"
+      - "--port=3003"
+      - "--open=false"
+      - "-d=${GOL_DOCKER_TARGET:-}"

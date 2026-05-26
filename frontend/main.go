@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kevincobain2000/gol/pkg"
+	"github.com/Vitalitty/gol/pkg"
 )
 
 //go:embed all:dist/*
@@ -94,30 +94,6 @@ func setFilePaths() {
 	// should be set if user has piped input
 	if pkg.GlobalPipeTmpFilePath != "" {
 		f.filePaths = append(f.filePaths, pkg.GlobalPipeTmpFilePath)
-	}
-
-	// If f.sshPaths is not nil, process each SSH path
-	if f.sshPaths != nil {
-		for _, sshPath := range f.sshPaths {
-			// Convert SSH path string to SSHPathConfig
-			sshFilePathConfig, err := pkg.StringToSSHPathConfig(sshPath)
-			if err != nil {
-				slog.Error("parsing SSH path", sshPath, err)
-				continue
-			}
-			if sshFilePathConfig != nil {
-				sshConfig := pkg.SSHConfig{
-					Host:           sshFilePathConfig.Host,
-					Port:           sshFilePathConfig.Port,
-					User:           sshFilePathConfig.User,
-					Password:       sshFilePathConfig.Password,
-					PrivateKeyPath: sshFilePathConfig.PrivateKeyPath,
-				}
-				// Get file information from the SSH path and append to GlobalFilePaths
-				fileInfos := pkg.GetFileInfos(sshFilePathConfig.FilePath, f.limit, true, &sshConfig)
-				pkg.GlobalFilePaths = append(pkg.GlobalFilePaths, fileInfos...)
-			}
-		}
 	}
 
 	// Update global file paths with the current filePaths, stdin to tmp, sshPaths, and dockerPaths

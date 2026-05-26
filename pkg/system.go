@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"bufio"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -11,6 +12,8 @@ import (
 	"github.com/acarl005/stripansi"
 	"github.com/kevincobain2000/go-human-uuid/lib"
 )
+
+const maxTempLogLines = 10000
 
 func GetHomedir() string {
 	home, err := os.UserHomeDir()
@@ -38,7 +41,7 @@ func PipeLinesToTmp(tmpFile *os.File) error {
 
 	linesCount, fileSize, err := FileStats(GlobalPipeTmpFilePath, false, nil)
 	if err != nil {
-		slog.Error("creating FileInfo for temp file", GlobalPipeTmpFilePath, err)
+		slog.Error("creating FileInfo for temp file", "path", GlobalPipeTmpFilePath, "error", err)
 		return err
 	}
 	tempFileInfo := FileInfo{FilePath: GlobalPipeTmpFilePath, LinesCount: linesCount, FileSize: fileSize, Type: TypeStdin}
@@ -46,30 +49,29 @@ func PipeLinesToTmp(tmpFile *os.File) error {
 	GlobalFilePaths = append([]FileInfo{tempFileInfo}, GlobalFilePaths...)
 	slog.Info("Temporary file added to global file paths", "filePaths", GlobalFilePaths)
 
+	return writeRollingScannerLines(scanner, tmpFile, maxTempLogLines)
+}
+
+func writeRollingScannerLines(scanner *bufio.Scanner, tmpFile *os.File, maxLines int) error {
 	lineCount := 0
 	for scanner.Scan() {
-		line := scanner.Text()
-		line = stripansi.Strip(line)
-		if lineCount >= 10000 {
+		if lineCount >= maxLines {
 			if err := tmpFile.Truncate(0); err != nil {
-				slog.Error("truncating file", GlobalPipeTmpFilePath, err)
+				return fmt.Errorf("truncate temp log: %w", err)
 			}
 			if _, err := tmpFile.Seek(0, 0); err != nil {
-				slog.Error("seeking file", GlobalPipeTmpFilePath, err)
+				return fmt.Errorf("seek temp log: %w", err)
 			}
 			lineCount = 0
 		}
-		if _, err := tmpFile.WriteString(line + "\n"); err != nil {
-			slog.Error("writing to file", GlobalPipeTmpFilePath, err)
+		if _, err := tmpFile.WriteString(stripansi.Strip(scanner.Text()) + "\n"); err != nil {
+			return fmt.Errorf("write temp log: %w", err)
 		}
 		lineCount++
 	}
-
 	if err := scanner.Err(); err != nil {
-		slog.Error("reading from pipe", GlobalPipeTmpFilePath, err)
-		return err
+		return fmt.Errorf("scan temp log: %w", err)
 	}
-
 	return nil
 }
 
@@ -108,7 +110,7 @@ func OpenBrowser(url string) {
 	}
 
 	if err != nil {
-		slog.Warn("Failed to open browser", "url", url)
+		slog.Warn("Failed to open browser", "url", url, "error", err)
 	}
 }
 
@@ -130,7 +132,7 @@ func Cleanup() {
 	}
 	err := os.Remove(GlobalPipeTmpFilePath)
 	if err != nil {
-		slog.Error("removing temp file", GlobalPipeTmpFilePath, err)
+		slog.Error("removing temp file", "path", GlobalPipeTmpFilePath, "error", err)
 		return
 	}
 	slog.Info("temp file removed", "path", GlobalPipeTmpFilePath)

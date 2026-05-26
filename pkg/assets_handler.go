@@ -23,14 +23,6 @@ func NewAssetsHandler(publicDir *embed.FS, distDir string, filename string) *Ass
 	}
 }
 
-func (h *AssetsHandler) GetPlain(c echo.Context) error {
-	filename := fmt.Sprintf("%s/%s", h.distDir, h.filename)
-	content, err := h.publicDir.ReadFile(filename)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "Not Found")
-	}
-	return ResponsePlain(c, content, "0")
-}
 func (h *AssetsHandler) GetICO(c echo.Context) error {
 	filename := fmt.Sprintf("%s/%s", h.distDir, h.filename)
 	content, err := h.publicDir.ReadFile(filename)

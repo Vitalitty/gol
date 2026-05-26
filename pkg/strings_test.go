@@ -4,27 +4,6 @@ import (
 	"testing"
 )
 
-func TestStringInSlice(t *testing.T) {
-	tests := []struct {
-		s    string
-		ss   []string
-		want bool
-	}{
-		{"hello", []string{"hello", "world"}, true},
-		{"go", []string{"golang", "python", "java"}, false},
-		{"java", []string{"golang", "python", "java"}, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.s, func(t *testing.T) {
-			got := StringInSlice(tt.s, tt.ss)
-			if got != tt.want {
-				t.Errorf("StringInSlice(%s, %v) = %v; want %v", tt.s, tt.ss, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestJudgeLogLevel(t *testing.T) {
 	tests := []struct {
 		line            string

@@ -15,30 +15,45 @@ import (
 	"github.com/docker/docker/client"
 )
 
-func ListDockerContainers() ([]container.Summary, error) {
+func newDockerClient() (*client.Client, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Docker client: %w", err)
+		return nil, fmt.Errorf("create Docker client: %w", err)
 	}
+	return cli, nil
+}
 
-	// Get the list of containers
+func closeDockerClient(cli *client.Client) {
+	if err := cli.Close(); err != nil {
+		slog.Debug("closing Docker client", "error", err)
+	}
+}
+
+func ListDockerContainers() ([]container.Summary, error) {
+	cli, err := newDockerClient()
+	if err != nil {
+		return nil, err
+	}
+	defer closeDockerClient(cli)
+
 	return cli.ContainerList(context.Background(), container.ListOptions{})
 }
 
 func ContainerStdoutToTmp(containerID string) *os.File {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := newDockerClient()
 	if err != nil {
-		slog.Error("creating Docker client", "docker", err)
+		slog.Error("creating Docker client", "error", err)
 		return nil
 	}
+	defer closeDockerClient(cli)
 
-	// Get container logs
 	options := container.LogsOptions{ShowStdout: true, ShowStderr: true}
 	out, err := cli.ContainerLogs(context.Background(), containerID, options)
 	if err != nil {
-		slog.Error("getting container logs", containerID, err)
+		slog.Error("getting container logs", "containerID", containerID, "error", err)
 		return nil
 	}
+	defer out.Close()
 
 	// Check if tmpFile already exists in GlobalFilePaths for container ID previously by watcher
 	var tmpFile *os.File
@@ -46,7 +61,7 @@ func ContainerStdoutToTmp(containerID string) *os.File {
 		if fileInfo.Host == containerID[:12] && fileInfo.Type == TypeDocker && strings.HasPrefix(fileInfo.FilePath, TmpContainerPath) {
 			tmpFile, err = os.OpenFile(fileInfo.FilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 			if err != nil {
-				slog.Error("opening temp file", fileInfo.FilePath, err)
+				slog.Error("opening temp file", "path", fileInfo.FilePath, "error", err)
 				return nil
 			}
 		}
@@ -54,42 +69,23 @@ func ContainerStdoutToTmp(containerID string) *os.File {
 	if tmpFile == nil {
 		tmpFile, err = os.Create(GetTmpFileNameForContainer())
 		if err != nil {
-			slog.Error("creating temp file", "tmp", err)
+			slog.Error("creating temp file", "error", err)
 			return nil
 		}
 	}
-	scanner := bufio.NewScanner(out)
-	lineCount := 0
-	for scanner.Scan() {
-		line := scanner.Text()
-		line = stripansi.Strip(line)
-		if lineCount >= 10000 {
-			if err := tmpFile.Truncate(0); err != nil {
-				slog.Error("truncating file", "scan", err)
-			}
-			if _, err := tmpFile.Seek(0, 0); err != nil {
-				slog.Error("seeking file", "scan", err)
-			}
-			lineCount = 0
-		}
-		if _, err := tmpFile.WriteString(line + "\n"); err != nil {
-			slog.Error("writing to file", "scan", err)
-		}
-		lineCount++
-	}
-
-	if err := scanner.Err(); err != nil {
-		slog.Error("reading container logs", containerID, err)
+	if err := writeRollingScannerLines(bufio.NewScanner(out), tmpFile, maxTempLogLines); err != nil {
+		slog.Error("reading container logs", "containerID", containerID, "error", err)
 	}
 	return tmpFile
 }
 
 func ContainerLogsFromFile(containerID string, query string, ignorePattern string, filePath string, page, pageSize int, reverse bool) (*ScanResult, error) {
 	lines := []LineResult{}
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := newDockerClient()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Docker client: %w", err)
+		return nil, err
 	}
+	defer closeDockerClient(cli)
 
 	re, err := regexp.Compile(query)
 	if err != nil {
@@ -206,11 +202,12 @@ func ContainerLogsFromFile(containerID string, query string, ignorePattern strin
 }
 
 func GetContainerFileInfos(pattern string, limit int, containerID string) []FileInfo {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := newDockerClient()
 	if err != nil {
-		slog.Error("Failed to create Docker client", "docker", err)
+		slog.Error("Failed to create Docker client", "error", err)
 		return nil
 	}
+	defer closeDockerClient(cli)
 
 	execConfig := container.ExecOptions{
 		Cmd:          []string{"sh", "-c", fmt.Sprintf("ls -1 %s", pattern)},
@@ -220,13 +217,13 @@ func GetContainerFileInfos(pattern string, limit int, containerID string) []File
 
 	execIDResp, err := cli.ContainerExecCreate(context.Background(), containerID, execConfig)
 	if err != nil {
-		slog.Error("Failed to create exec instance", "container", err)
+		slog.Error("Failed to create exec instance", "containerID", containerID, "error", err)
 		return nil
 	}
 
 	resp, err := cli.ContainerExecAttach(context.Background(), execIDResp.ID, container.ExecStartOptions{})
 	if err != nil {
-		slog.Error("Failed to attach to exec instance", "container", err)
+		slog.Error("Failed to attach to exec instance", "containerID", containerID, "error", err)
 		return nil
 	}
 	defer resp.Close()
@@ -237,19 +234,19 @@ func GetContainerFileInfos(pattern string, limit int, containerID string) []File
 		filePaths = append(filePaths, CleanString(scanner.Text()))
 	}
 	if err := scanner.Err(); err != nil {
-		slog.Error("reading exec output", "scanner", err)
+		slog.Error("reading exec output", "error", err)
 		return nil
 	}
 
 	fileInfos := make([]FileInfo, 0)
 	if len(filePaths) > limit {
-		slog.Warn("Limiting to files", "docker", limit)
+		slog.Warn("Limiting to files", "limit", limit)
 		filePaths = filePaths[:limit]
 	}
 	for _, filePath := range filePaths {
 		linesCount, fileSize, err := getFileStatsFromContainer(cli, containerID, filePath)
 		if err != nil {
-			slog.Error("Failed to get file stats", filePath, err)
+			slog.Error("Failed to get file stats", "filePath", filePath, "error", err)
 			continue
 		}
 

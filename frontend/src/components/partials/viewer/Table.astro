@@ -65,13 +65,13 @@
             <template x-if="input.reverse">
               <button
                 class="text-white"
-                @click="input.reverse=false;input.page=1;submit()">▼</button
+                @click="input.reverse=false;input.page=1;submit()">v</button
               >
             </template>
             <template x-if="!input.reverse">
               <button
                 class="text-white"
-                @click="input.reverse=true;input.page=1;submit()">▲</button
+                @click="input.reverse=true;input.page=1;submit()">^</button
               >
             </template>
             No.
@@ -244,10 +244,10 @@
 <style>
   @keyframes highlight {
     from {
-      @apply opacity-10;
+      opacity: 0.1;
     }
     to {
-      @apply opacity-100;
+      opacity: 1;
     }
   }
 

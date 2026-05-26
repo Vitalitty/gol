@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/kevincobain2000/gol/pkg"
+	"github.com/Vitalitty/gol/pkg"
 	"github.com/labstack/echo/v4"
 )
 

@@ -28,15 +28,15 @@ func WatchFilePaths(seconds int64, filePaths SliceFlags, sshPaths SliceFlags, do
 func HandleStdinPipe() {
 	tmpFile, err := os.Create(GetTmpFileNameForSTDIN())
 	if err != nil {
-		slog.Error("creating temp file", tmpFile.Name(), err)
+		slog.Error("creating temp file", "error", err)
 		return
 	}
 	GlobalPipeTmpFilePath = tmpFile.Name()
-	defer tmpFile.Close()
 	go func(tmpFile *os.File) {
+		defer tmpFile.Close()
 		err := PipeLinesToTmp(tmpFile)
 		if err != nil {
-			slog.Error("piping lines to temp file", tmpFile.Name(), err)
+			slog.Error("piping lines to temp file", "path", tmpFile.Name(), "error", err)
 			return
 		}
 	}(tmpFile)
@@ -44,6 +44,8 @@ func HandleStdinPipe() {
 
 func UpdateGlobalFilePaths(filePaths SliceFlags, sshPaths SliceFlags, dockerPaths SliceFlags, limit int) {
 	fileInfos := []FileInfo{}
+	GlobalPathSSHConfig = nil
+
 	for _, pattern := range filePaths {
 		fileInfo := GetFileInfos(pattern, limit, false, nil)
 		fileInfos = append(fileInfo, fileInfos...)
@@ -51,8 +53,8 @@ func UpdateGlobalFilePaths(filePaths SliceFlags, sshPaths SliceFlags, dockerPath
 	for _, pattern := range sshPaths {
 		sshFilePathConfig, err := StringToSSHPathConfig(pattern)
 		if err != nil {
-			slog.Error("parsing SSH path", pattern, err)
-			break
+			slog.Error("parsing SSH path", "pattern", pattern, "error", err)
+			continue
 		}
 		sshConfig := SSHConfig{
 			Host:           sshFilePathConfig.Host,
@@ -69,7 +71,7 @@ func UpdateGlobalFilePaths(filePaths SliceFlags, sshPaths SliceFlags, dockerPath
 	for _, pattern := range dockerPaths {
 		containers, err := ListDockerContainers()
 		if err != nil {
-			slog.Error("listing Docker containers", pattern, err)
+			slog.Error("listing Docker containers", "pattern", pattern, "error", err)
 			break
 		}
 		if pattern == "" || len(strings.Fields(pattern)) == 1 {
@@ -82,7 +84,12 @@ func UpdateGlobalFilePaths(filePaths SliceFlags, sshPaths SliceFlags, dockerPath
 					slog.Error("creating temp file for container logs", "containerID", container.ID)
 					continue
 				}
-				fileInfo := GetFileInfos(tmpFile.Name(), limit, false, nil)
+				tmpFileName := tmpFile.Name()
+				if err := tmpFile.Close(); err != nil {
+					slog.Error("closing container log temp file", "path", tmpFileName, "error", err)
+					continue
+				}
+				fileInfo := GetFileInfos(tmpFileName, limit, false, nil)
 				if len(fileInfo) > 0 {
 					fileInfo[0].Host = container.ID[:12]
 					fileInfo[0].Type = TypeDocker
@@ -94,7 +101,7 @@ func UpdateGlobalFilePaths(filePaths SliceFlags, sshPaths SliceFlags, dockerPath
 		if len(strings.Fields(pattern)) == 2 {
 			dockerFilePathConfig, err := StringToDockerPathConfig(pattern)
 			if err != nil {
-				slog.Error("parsing Docker path", pattern, err)
+				slog.Error("parsing Docker path", "pattern", pattern, "error", err)
 				break
 			}
 			fileInfo := GetContainerFileInfos(dockerFilePathConfig.FilePath, limit, dockerFilePathConfig.ContainerID)

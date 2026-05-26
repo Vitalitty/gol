@@ -1,9 +1,7 @@
 package pkg
 
 import (
-	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -13,30 +11,15 @@ import (
 	"github.com/mileusna/useragent"
 )
 
-func F64NumberToK(num *float64) string {
-	if num == nil {
-		return "0"
-	}
+const (
+	logLevelSuccess = "success"
+	logLevelInfo    = "info"
+	logLevelError   = "error"
+	logLevelWarn    = "warn"
+	logLevelDanger  = "danger"
+	logLevelDebug   = "debug"
+)
 
-	if *num < 1000 {
-		return strconv.FormatFloat(*num, 'f', -1, 64)
-	}
-
-	if *num < 1000000 {
-		return strconv.FormatFloat(*num/1000, 'f', 1, 64) + "k"
-	}
-
-	return strconv.FormatFloat(*num/1000000, 'f', 1, 64) + "m"
-}
-
-func StringInSlice(s string, ss []string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
 func FilePathInGlobalFilePaths(filePath string) bool {
 	for _, fileInfo := range GlobalFilePaths {
 		if fileInfo.FilePath == filePath {
@@ -66,12 +49,12 @@ func JudgeLogLevel(line string, keywordPosition int) string {
 	line = strings.ToLower(line) // Convert the line to lowercase for easier comparison
 
 	// Keywords for different log levels
-	successKeywords := []string{"success", "SUCCESS", "succ", "SUCC", "Success"}
-	infoKeywords := []string{"info", "inf", "INFO", "INF", "Info", "Inf"}
-	errorKeywords := []string{"error", "err", "fail", "ERROR", "ERR", "FAIL", "Error", "Err", "Fail"}
-	warnKeywords := []string{"warn", "warning", "alert", "wrn", "WARN", "WARNING", "ALERT", "Wrn", "Wrning", "Alert"}
-	dangerKeywords := []string{"danger", "fatal", "severe", "critical", "DANGER", "FATAL", "SEVERE", "CRITICAL", "Danger", "Fatal", "Severe", "Critical"}
-	debugKeywords := []string{"debug", "dbg", "DEBUG", "DBG", "Debug"}
+	successKeywords := []string{logLevelSuccess, "succ"}
+	infoKeywords := []string{logLevelInfo, "inf"}
+	errorKeywords := []string{logLevelError, "err", "fail"}
+	warnKeywords := []string{logLevelWarn, "warning", "alert", "wrn"}
+	dangerKeywords := []string{logLevelDanger, "fatal", "severe", "critical"}
+	debugKeywords := []string{logLevelDebug, "dbg"}
 
 	// Helper function to check if a keyword is at a specific position
 	isKeywordAtPosition := func(line, keyword string, position int) bool {
@@ -81,36 +64,36 @@ func JudgeLogLevel(line string, keywordPosition int) string {
 	// Check for keywords at the specified position
 	for _, keyword := range successKeywords {
 		if isKeywordAtPosition(line, keyword, keywordPosition) {
-			return "success"
+			return logLevelSuccess
 		}
 	}
 	for _, keyword := range infoKeywords {
 		if isKeywordAtPosition(line, keyword, keywordPosition) {
-			return "info"
+			return logLevelInfo
 		}
 	}
 
 	for _, keyword := range errorKeywords {
 		if isKeywordAtPosition(line, keyword, keywordPosition) {
-			return "error"
+			return logLevelError
 		}
 	}
 
 	for _, keyword := range warnKeywords {
 		if isKeywordAtPosition(line, keyword, keywordPosition) {
-			return "warn"
+			return logLevelWarn
 		}
 	}
 
 	for _, keyword := range dangerKeywords {
 		if isKeywordAtPosition(line, keyword, keywordPosition) {
-			return "danger"
+			return logLevelDanger
 		}
 	}
 
 	for _, keyword := range debugKeywords {
 		if isKeywordAtPosition(line, keyword, keywordPosition) {
-			return "debug"
+			return logLevelDebug
 		}
 	}
 
@@ -141,6 +124,9 @@ func ConsistentFormat(logLines []string) (bool, int) {
 		position := strings.Index(line, firstWord)
 		positions = append(positions, position)
 	}
+	if len(positions) == 0 {
+		return false, -1
+	}
 
 	consistentPosition := positions[0]
 	for _, pos := range positions {
@@ -159,7 +145,7 @@ func AppendGeneralInfo(lines *[]LineResult) {
 }
 
 func appendLogLevel(lines *[]LineResult) {
-	logLines := []string{}
+	logLines := make([]string, 0, len(*lines))
 	for _, line := range *lines {
 		line.Content = stripansi.Strip(line.Content)
 		logLines = append(logLines, line.Content)
@@ -176,7 +162,7 @@ func appendLogLevel(lines *[]LineResult) {
 func appendAgent(lines *[]LineResult) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Recovered from panic:", r)
+			slog.Warn("recovering from agent parsing panic", "panic", r)
 		}
 	}()
 	for i, line := range *lines {
@@ -199,7 +185,7 @@ func appendAgent(lines *[]LineResult) {
 func appendDates(lines *[]LineResult) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Recovered from panic:", r)
+			slog.Warn("recovering from date parsing panic", "panic", r)
 		}
 	}()
 	for i, line := range *lines {
@@ -209,8 +195,9 @@ func appendDates(lines *[]LineResult) {
 }
 
 var (
-	tg   *timegrinder.TimeGrinder
-	once sync.Once
+	tg    *timegrinder.TimeGrinder
+	tgErr error
+	once  sync.Once
 )
 
 func initTimeGrinder() error {
@@ -224,12 +211,15 @@ func initTimeGrinder() error {
 }
 
 func searchDate(input string) string {
-	var initErr error
 	once.Do(func() {
-		initErr = initTimeGrinder()
+		tgErr = initTimeGrinder()
 	})
-	if initErr != nil {
-		slog.Error("Error initializing", "timegrinder", initErr)
+	if tgErr != nil {
+		slog.Error("Error initializing timegrinder", "error", tgErr)
+		return ""
+	}
+	if tg == nil {
+		slog.Error("timegrinder is not initialized")
 		return ""
 	}
 	ts, ok, err := tg.Extract([]byte(input))
