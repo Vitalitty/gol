@@ -1,8 +1,11 @@
-import astroSingleFile from 'astro-single-file'
 import { defineConfig } from 'astro/config'
-import tailwind from '@astrojs/tailwind'
+import tailwindcss from '@tailwindcss/vite'
+import singleFile from './integrations/single-file.mjs'
 
 // https://astro.build/config
 export default defineConfig({
-  integrations: [astroSingleFile(), tailwind()]
+  integrations: [singleFile()],
+  vite: {
+    plugins: [tailwindcss()]
+  }
 })

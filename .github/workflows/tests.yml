@@ -1,50 +1,67 @@
+name: Tests
+
 on:
   pull_request:
   push:
-    tags-ignore:
-      - '**'
     branches:
-      - master
+      - main
+    tags-ignore:
+      - "**"
 
-name: "Tests"
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
 jobs:
   tests:
-    strategy:
-      matrix:
-        go-version: [latest]
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: kevincobain2000/action-gobrew@v2
-        with:
-          version: ${{ matrix.go-version }}
-      - name: Setup Node.js ${{ matrix.node-versions }}
-        uses: actions/setup-node@v2
-        with:
-          node-version: 20
+      - name: Checkout
+        uses: actions/checkout@v6
 
-      - name: Install Tools
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Check frontend
+        working-directory: frontend
+        run: npm run check
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify generated files and modules are current
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          curl -sLk https://raw.githubusercontent.com/kevincobain2000/cover-totalizer/master/install.sh | sh
-      - name: Setup Node.js ${{ matrix.node-versions }}
-        uses: actions/setup-node@v2
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum frontend/package-lock.json frontend/dist
+
+      - name: Build packages
+        run: go build ./...
+
+      - name: Build CLI
+        run: go build -ldflags "-s -w -X main.version=dev" -o gol ./frontend
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
         with:
-          node-version: 20
-      - uses: shogo82148/actions-setup-mysql@v1
-        with:
-          mysql-version: "8.0"
+          version: v2.12.2
 
-      - run: cd frontend; npm install
-      - run: cd frontend; npm run check
-
-      - run: cd frontend; npm run build
-      - run: go mod tidy;go build -ldflags '-s -w' -o gol frontend/main.go
-      - run: go mod tidy;go build
-      - run: golangci-lint run ./...
-      - run: go test -race -v ./... -count=1 -coverprofile=coverage.out
-
+      - name: Test
+        run: go test -race -v ./... -count=1 -coverprofile=coverage.out

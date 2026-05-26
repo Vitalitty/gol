@@ -71,6 +71,7 @@ func TestWatcher_InitializeScanner(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, file)
 	assert.NotNil(t, scanner)
+	defer file.Close()
 
 	// Read the lines
 	var lines []string

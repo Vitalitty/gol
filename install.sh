@@ -8,6 +8,7 @@ echo "Installing gol to $BIN_DIR"
 
 THE_ARCH_BIN=''
 THIS_PROJECT_NAME='gol'
+OUTPUT_NAME="$THIS_PROJECT_NAME"
 
 THISOS=$(uname -s)
 ARCH=$(uname -m)
@@ -23,10 +24,10 @@ case $THISOS in
           THE_ARCH_BIN="$THIS_PROJECT_NAME-linux-arm64"
           ;;
         armv6l)
-          THE_ARCH_BIN="$THIS_PROJECT_NAME-linux-arm"
+          THE_ARCH_BIN="$THIS_PROJECT_NAME-linux-armv6"
           ;;
         armv7l)
-          THE_ARCH_BIN="$THIS_PROJECT_NAME-linux-arm"
+          THE_ARCH_BIN="$THIS_PROJECT_NAME-linux-armv7"
           ;;
         *)
           THE_ARCH_BIN="$THIS_PROJECT_NAME-linux-amd64"
@@ -44,8 +45,16 @@ case $THISOS in
       esac
       ;;
    Windows|MINGW64_NT*)
-      THE_ARCH_BIN="$THIS_PROJECT_NAME-windows-amd64.exe"
-      THIS_PROJECT_NAME="$THIS_PROJECT_NAME.exe"
+      case $ARCH in
+        arm64|aarch64)
+          THE_ARCH_BIN="$THIS_PROJECT_NAME-windows-arm64.exe"
+          ;;
+        *)
+          THE_ARCH_BIN="$THIS_PROJECT_NAME-windows-amd64.exe"
+          ;;
+      esac
+      OUTPUT_NAME="$THIS_PROJECT_NAME.exe"
+      DEST="$BIN_DIR/$OUTPUT_NAME"
       ;;
 esac
 
@@ -55,9 +64,9 @@ if [ -z "$THE_ARCH_BIN" ]; then
 fi
 
 
-curl -kL --progress-bar https://github.com/kevincobain2000/$THIS_PROJECT_NAME/releases/latest/download/$THE_ARCH_BIN -o $THIS_PROJECT_NAME
-echo "Downloaded $THIS_PROJECT_NAME"
-chmod +x $THIS_PROJECT_NAME
+curl -kL --progress-bar https://github.com/Vitalitty/gol/releases/latest/download/$THE_ARCH_BIN -o "$OUTPUT_NAME"
+echo "Downloaded $OUTPUT_NAME"
+chmod +x "$OUTPUT_NAME"
 
 SUDO=""
 
@@ -70,7 +79,6 @@ if [ $? -eq 1 ]; then
     SUDO="sudo"
 fi
 
-$SUDO mv $THIS_PROJECT_NAME "$BIN_DIR"
+$SUDO mv "$OUTPUT_NAME" "$BIN_DIR"
 
 echo "Installed successfully to: $DEST"
-

@@ -9,11 +9,6 @@
       "@assets/*": [
         "src/assets/*"
       ]
-    },
-    "jsx": "react-jsx",
-    "jsxImportSource": "react",
-  },
-  "exclude": [
-    "src/components/Alpine.astro",
-  ]
+    }
+  }
 }

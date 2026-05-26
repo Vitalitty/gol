@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -188,7 +187,7 @@ func FileStats(filePath string, isRemote bool, sshConfig *SSHConfig) (int, int64
 func GetFileInfos(pattern string, limit int, isRemote bool, sshConfig *SSHConfig) []FileInfo {
 	filePaths, err := FilesByPattern(pattern, isRemote, sshConfig)
 	if err != nil {
-		slog.Error("getting file paths by pattern", pattern, err)
+		slog.Error("getting file paths by pattern", "pattern", pattern, "error", err)
 		return nil
 	}
 	if len(filePaths) == 0 {
@@ -204,7 +203,7 @@ func GetFileInfos(pattern string, limit int, isRemote bool, sshConfig *SSHConfig
 	for _, filePath := range filePaths {
 		isText, err := IsReadableFile(filePath, isRemote, sshConfig, false)
 		if err != nil {
-			slog.Error("checking if file is readable", filePath, err)
+			slog.Error("checking if file is readable", "filePath", filePath, "error", err)
 			return nil
 		}
 		if !isText {
@@ -218,7 +217,7 @@ func GetFileInfos(pattern string, limit int, isRemote bool, sshConfig *SSHConfig
 				linesCount = 0
 				fileSize = 0
 			} else {
-				slog.Error("getting file stats", filePath, err)
+				slog.Error("getting file stats", "filePath", filePath, "error", err)
 				continue
 			}
 		}
@@ -413,8 +412,15 @@ func sshFilesByPattern(pattern string, config *SSHConfig) ([]string, error) {
 }
 
 func UniqueFileInfos(fileInfos []FileInfo) []FileInfo {
-	eq := func(a, b FileInfo) bool {
-		return a.FilePath == b.FilePath && a.Type == b.Type && a.Host == b.Host
+	seen := make(map[string]struct{}, len(fileInfos))
+	unique := make([]FileInfo, 0, len(fileInfos))
+	for _, fileInfo := range fileInfos {
+		key := fileInfo.Type + "\x00" + fileInfo.Host + "\x00" + fileInfo.FilePath
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		unique = append(unique, fileInfo)
 	}
-	return slices.CompactFunc(fileInfos, eq)
+	return unique
 }

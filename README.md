@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/kevincobain2000/gol">
+  <a href="https://github.com/Vitalitty/gol">
     <img alt="gol" src="https://imgur.com/sktoYPP.png" width="120">
   </a>
 </p>
@@ -55,7 +55,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kevincobain2000/gol">
+  <a href="https://github.com/Vitalitty/gol">
     <img alt="gol" src="https://imgur.com/fBK0hGa.png">
   </a>
 </p>
@@ -65,8 +65,13 @@
 Use this method if go is not installed on your server
 
 ```bash
-curl -sL https://raw.githubusercontent.com/kevincobain2000/gol/master/install.sh | sh
+curl -sL https://raw.githubusercontent.com/Vitalitty/gol/main/install.sh | sh
 ```
+
+### Run with Docker
+
+Container examples for local files, Docker logs, SSH keys, custom flags, and
+volume permissions are available in [docker/README.md](docker/README.md).
 
 ## Examples
 
@@ -107,7 +112,7 @@ gol -d="container-id" \
 
 ### Embed in GO
 
-If you don't want to use CLI to have seperate port and want to integrate within your existing Go app.
+If you don't want to use the CLI on a separate port and want to integrate within your existing Go app.
 
 
 ```go
@@ -115,7 +120,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/kevincobain2000/gol"
+	"github.com/Vitalitty/gol"
 )
 
 func main() {
@@ -153,6 +158,12 @@ func main() {
 - **v1.1.2** - Go VUP
 - **v1.1.3** - Node VUP and debounce for better performance.
 
+## Fork Maintenance
+
+This repository is the maintained `Vitalitty/gol` fork of the original
+[`kevincobain2000/gol`](https://github.com/kevincobain2000/gol) project.
+New embedded integrations should import `github.com/Vitalitty/gol`.
+
 ## Limitations
 
 - **Docker Logs:** Only supports logs from containers running on the same machine.
@@ -162,6 +173,12 @@ func main() {
 
 
 ## Development Notes
+
+Prerequisites:
+
+- Go 1.26.3
+- Node.js 24 LTS
+- npm, using the checked-in lockfile with `npm ci`
 
 ```sh
 # Get some fake logs
@@ -174,7 +191,12 @@ go run main.go --cors=4321 --open=false -f="../testdata/*log"
 # API development on http://localhost:3003/api
 
 # Start the frontend
-npm install
+npm ci
 npm run dev
 # Frontend development on http://localhost:4321/
 ```
+
+`npm audit --omit=dev` should remain clean. A full `npm audit` can report a
+dev-only advisory through `@astrojs/check` and its language-server YAML
+dependency chain; keep `@astrojs/check` current and reassess when upstream
+publishes a compatible fix.

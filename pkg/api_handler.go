@@ -107,13 +107,19 @@ func (h *APIHandler) Get(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusInternalServerError, err)
 		}
 	}
+	if watcher == nil {
+		return echo.NewHTTPError(http.StatusUnprocessableEntity, "unsupported type")
+	}
 
 	result, err := watcher.Scan(req.Page, req.PerPage, req.Reverse)
-	result.Type = req.Type
-	result.Host = req.Host
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err)
 	}
+	if result == nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "scan result is empty")
+	}
+	result.Type = req.Type
+	result.Host = req.Host
 
 	return c.JSON(http.StatusOK, APIResponse{
 		Result:    *result,

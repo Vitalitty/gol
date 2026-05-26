@@ -1,9 +1,12 @@
-#! /bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-cd frontend
-npm install
-npm run build
+cd "$(dirname "$0")"
 
-go build main.go
+(
+  cd frontend
+  npm ci
+  npm run build
+)
 
-cd ..
+go build -ldflags "-s -w -X main.version=dev" -o gol ./frontend

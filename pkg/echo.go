@@ -41,7 +41,7 @@ func NewEcho(opts ...EchoOption) error {
 
 	SetupMiddlewares(e)
 	if options.Access {
-		e.Use(middleware.Logger())
+		e.Use(middleware.RequestLogger())
 	}
 	SetupRoutes(e, options)
 	SetupCors(e, options)
@@ -55,9 +55,7 @@ func SetupMiddlewares(e *echo.Echo) {
 	e.Use(middleware.Recover())
 	e.Use(middleware.Gzip())
 	e.Pre(middleware.RemoveTrailingSlash())
-	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-		Format: ltsv(),
-	}))
+	e.Use(requestLoggerWithLTSV())
 }
 
 func SetupRoutes(e *echo.Echo, options *EchoOptions) {
@@ -98,30 +96,49 @@ func HTTPErrorHandler(err error, c echo.Context) {
 		message = fmt.Sprintf("%v", err)
 	}
 	if err = c.JSON(code, &HTTPErrorResponse{Error: message}); err != nil {
-		slog.Error("handling HTTP error", "handler", err)
+		slog.Error("handling HTTP error", "error", err)
 	}
 }
 
-func ltsv() string {
-	timeCustom := time.Now().Format("2006-01-02 15:04:05")
-	var format string
-	format += fmt.Sprintf("time:%s\t", timeCustom)
-	format += "host:${remote_ip}\t"
-	format += "forwardedfor:${header:x-forwarded-for}\t"
-	format += "req:-\t"
-	format += "status:${status}\t"
-	format += "method:${method}\t"
-	format += "uri:${uri}\t"
-	format += "size:${bytes_out}\t"
-	format += "referer:${referer}\t"
-	format += "ua:${user_agent}\t"
-	format += "reqtime_ns:${latency}\t"
-	format += "cache:-\t"
-	format += "runtime:-\t"
-	format += "apptime:-\t"
-	format += "vhost:${host}\t"
-	format += "reqtime_human:${latency_human}\t"
-	format += "x-request-id:${id}\t"
-	format += "host:${host}\n"
-	return format
+func requestLoggerWithLTSV() echo.MiddlewareFunc {
+	return middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogLatency:      true,
+		LogRemoteIP:     true,
+		LogHost:         true,
+		LogMethod:       true,
+		LogURI:          true,
+		LogRequestID:    true,
+		LogReferer:      true,
+		LogUserAgent:    true,
+		LogStatus:       true,
+		LogError:        true,
+		LogResponseSize: true,
+		LogHeaders:      []string{echo.HeaderXForwardedFor},
+		HandleError:     true,
+		LogValuesFunc: func(_ echo.Context, v middleware.RequestLoggerValues) error {
+			forwardedFor := ""
+			if values := v.Headers[echo.HeaderXForwardedFor]; len(values) > 0 {
+				forwardedFor = values[0]
+			}
+
+			fmt.Printf(
+				"time:%s\thost:%s\tforwardedfor:%s\treq:-\tstatus:%d\tmethod:%s\turi:%s\tsize:%d\treferer:%s\tua:%s\treqtime_ns:%d\tcache:-\truntime:-\tapptime:-\tvhost:%s\treqtime_human:%s\tx-request-id:%s\thost:%s\n",
+				time.Now().Format("2006-01-02 15:04:05"),
+				v.RemoteIP,
+				forwardedFor,
+				v.Status,
+				v.Method,
+				v.URI,
+				v.ResponseSize,
+				v.Referer,
+				v.UserAgent,
+				v.Latency.Nanoseconds(),
+				v.Host,
+				v.Latency.String(),
+				v.RequestID,
+				v.Host,
+			)
+			return nil
+		},
+	})
 }
