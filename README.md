@@ -139,25 +139,6 @@ func main() {
 }
 ```
 
-## CHANGE LOG
-
-- **v1.0.0** - Initial release.
-- **v1.0.3** - Multiple file patterns, and pipe input support.
-- **v1.0.4** - Support os.Args for quick view.
-- **v1.0.5** - Support ssh logs.
-- **v1.0.6** - UI shows grouped output.
-- **v1.0.7** - Support docker logs.
-- **v1.0.14** - Sleak UI changes and support dates.
-- **v1.0.17** - Support both ignore and include patterns.
-- **v1.0.21** - Better logging.
-- **v1.0.22** - Support UA.
-- **v1.0.24** - Dropdown on files.
-- **v1.0.25** - Searchable files.
-- **v1.1.0** - Embed in GO, buggy.
-- **v1.1.1** - Embed in GO, stable.
-- **v1.1.2** - Go VUP
-- **v1.1.3** - Node VUP and debounce for better performance.
-
 ## Fork Maintenance
 
 This repository is the maintained `Vitalitty/gol` fork of the original
