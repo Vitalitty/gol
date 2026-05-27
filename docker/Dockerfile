@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false \
   -ldflags="-s -w -X main.version=${VERSION}" \
   -o /out/gol ./frontend
 
-FROM alpine:3.22 AS runtime
+FROM alpine:3.23 AS runtime
 RUN apk add --no-cache bash ca-certificates tzdata \
   && addgroup -S gol \
   && adduser -S -G gol gol \
