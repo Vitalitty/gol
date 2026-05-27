@@ -48,25 +48,16 @@ function timeago(value) {
   return `${Math.floor(secondsPast / 31536000)}yrs ago`
 }
 
-function hasMatch(query, value, length) {
-  const needle = String(query ?? '').toLowerCase()
-  const haystack = String(value ?? '').toLowerCase()
-  for (let i = 0; i <= needle.length - length; i += 1) {
-    if (haystack.includes(needle.substring(i, i + length))) {
-      return true
-    }
-  }
-  return false
-}
-
 function matchesFileQuery(query, fileInfo) {
-  const minMatchLength = 3
+  const needle = String(query ?? '').trim().toLowerCase()
+  if (needle === '') return true
+
   if (fileInfo.type === 'docker') {
     const fields = [fileInfo.type, fileInfo.host, fileInfo.name]
     if (!String(fileInfo.file_path ?? '').startsWith('/tmp/GOL-')) {
       fields.push(fileInfo.file_path)
     }
-    return fields.some((field) => hasMatch(query, field, minMatchLength))
+    return fields.some((field) => String(field ?? '').toLowerCase().includes(needle))
   }
 
   const fields = [fileInfo.type]
@@ -75,7 +66,7 @@ function matchesFileQuery(query, fileInfo) {
   }
   if (fileInfo.type === 'ssh') fields.push(fileInfo.host)
 
-  return fields.some((field) => hasMatch(query, field, minMatchLength))
+  return fields.some((field) => String(field ?? '').toLowerCase().includes(needle))
 }
 
 function defaultResult() {
@@ -132,17 +123,15 @@ export function createGolViewer() {
       await this.fetchLogs()
     },
     submitFile() {
-      if (this.input.query_file === '') {
+      const query = this.input.query_file.trim()
+      if (query === '') {
         this.results.file_paths = this.results.file_paths_backup
-        return
-      }
-      if (this.input.query_file.length < 3) {
         return
       }
 
       document.getElementById('files')?.scroll(0, 0)
       this.results.file_paths = this.results.file_paths_backup.filter((fileInfo) =>
-        matchesFileQuery(this.input.query_file, fileInfo)
+        matchesFileQuery(query, fileInfo)
       )
     },
     async fetchLogs() {
