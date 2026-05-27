@@ -26,15 +26,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false \
   -o /out/gol ./frontend
 
 FROM alpine:3.22 AS runtime
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk add --no-cache bash ca-certificates tzdata \
   && addgroup -S gol \
   && adduser -S -G gol gol \
   && mkdir -p /logs \
   && chown -R gol:gol /logs
 
 COPY --from=builder /out/gol /usr/local/bin/gol
+COPY docker/gol-entrypoint.sh /usr/local/bin/gol-entrypoint
+RUN chmod +x /usr/local/bin/gol-entrypoint
 
 EXPOSE 3003
 USER gol
-ENTRYPOINT ["gol"]
-CMD ["--host=0.0.0.0", "--open=false", "-f=/logs/*.log"]
+ENTRYPOINT ["gol-entrypoint"]
