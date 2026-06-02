@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
 FROM node:24-alpine AS frontend
+ENV ASTRO_TELEMETRY_DISABLED=1
 WORKDIR /src/frontend
+
+RUN npm install -g npm@11.16.0
 
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
