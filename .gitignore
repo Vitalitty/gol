@@ -35,6 +35,7 @@ docker/logs/
 docker/tmp/
 docker/data/
 docker/*.local.yml
+docker-compose.override.yml
 
 .env
 .env.*

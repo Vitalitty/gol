@@ -114,24 +114,38 @@ cp docker/.env.example docker/.env
 docker compose --env-file docker/.env -f docker/docker-compose.yml up -d
 ```
 
-For local image development, add a `docker/docker-compose.local.yml` override:
+For local image development, use the tracked `docker/docker-compose.override.yml`
+override. It builds `docker/Dockerfile` from this checkout and tags the result
+as `ghcr.io/vitalitty/gol:local`.
 
-```yaml
-services:
-  gol:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    image: ghcr.io/vitalitty/gol:local
-```
-
-Then run:
+From the repository root, pass both files explicitly:
 
 ```sh
 docker compose --env-file docker/.env \
   -f docker/docker-compose.yml \
-  -f docker/docker-compose.local.yml \
-  up --build
+  -f docker/docker-compose.override.yml \
+  up --build -d --force-recreate
+```
+
+From the `docker/` directory, Compose auto-loads the override:
+
+```sh
+docker compose --env-file .env up --build -d --force-recreate
+```
+
+When mounting several host directories below `/logs`, replace the base
+`${GOL_LOG_DIR}:/logs:ro` mount with a writable parent such as `tmpfs`, then add
+each source as a read-only child mount:
+
+```yaml
+services:
+  gol:
+    volumes:
+      - type: tmpfs
+        target: /logs
+      - "C:/Users/theow/Downloads/logs:/logs/npm:ro"
+      - "C:/Users/theow/Downloads/redm-dev:/logs/redm-dev:ro"
+      - "C:/Users/theow/Downloads/redm-prod:/logs/redm-prod:ro"
 ```
 
 ## Volume Notes

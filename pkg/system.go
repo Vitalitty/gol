@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 
 	"github.com/acarl005/stripansi"
 	"github.com/kevincobain2000/go-human-uuid/lib"
@@ -127,13 +128,20 @@ func HandleCltrC(f func()) {
 }
 
 func Cleanup() {
-	if GlobalPipeTmpFilePath == "" {
-		return
+	paths := make(map[string]struct{})
+	if GlobalPipeTmpFilePath != "" {
+		paths[GlobalPipeTmpFilePath] = struct{}{}
 	}
-	err := os.Remove(GlobalPipeTmpFilePath)
-	if err != nil {
-		slog.Error("removing temp file", "path", GlobalPipeTmpFilePath, "error", err)
-		return
+	for _, fileInfo := range GlobalFilePaths {
+		if fileInfo.Type == TypeDocker && strings.HasPrefix(fileInfo.FilePath, TmpContainerPath) {
+			paths[fileInfo.FilePath] = struct{}{}
+		}
 	}
-	slog.Info("temp file removed", "path", GlobalPipeTmpFilePath)
+	for path := range paths {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			slog.Error("removing temp file", "path", path, "error", err)
+			continue
+		}
+		slog.Info("temp file removed", "path", path)
+	}
 }
