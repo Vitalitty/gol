@@ -64,9 +64,24 @@ function matchesFileQuery(query, fileInfo) {
   if (fileInfo.type !== 'stdin') {
     fields.push(fileInfo.file_path)
   }
+  if (fileInfo.type === 'file') fields.push(fileSourceLabel(fileInfo))
   if (fileInfo.type === 'ssh') fields.push(fileInfo.host)
 
   return fields.some((field) => String(field ?? '').toLowerCase().includes(needle))
+}
+
+function fileSourceLabel(fileInfo) {
+  const filePath = String(fileInfo.file_path ?? '')
+  if (fileInfo.type === 'file') {
+    if (filePath.startsWith('/logs/')) {
+      return filePath.split('/')[2] || '/logs'
+    }
+    return filePath.split('/').slice(0, -1).join('/') || 'Local files'
+  }
+  if (fileInfo.type === 'ssh') return fileInfo.host || 'SSH'
+  if (fileInfo.type === 'docker') return fileInfo.name || fileInfo.host || 'Docker'
+  if (fileInfo.type === 'stdin') return 'STDIN'
+  return fileInfo.type || 'Files'
 }
 
 function defaultResult() {
@@ -112,10 +127,43 @@ export function createGolViewer() {
       errorJSON: '',
       updated_at: ''
     },
+    groupExpanded: {},
     formatBytes,
     numberToK,
     formatLogString,
     timeago,
+    fileGroups() {
+      const groups = []
+      const seen = new Set()
+
+      for (const fileInfo of this.results.file_paths) {
+        const label = fileSourceLabel(fileInfo)
+        const key = `${fileInfo.type}:${label}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        groups.push({
+          key,
+          type: fileInfo.type,
+          label,
+          count: this.results.file_paths.filter(
+            (current) => current.type === fileInfo.type && fileSourceLabel(current) === label
+          ).length
+        })
+      }
+
+      return groups
+    },
+    groupFiles(group) {
+      return this.results.file_paths.filter(
+        (fileInfo) => fileInfo.type === group.type && fileSourceLabel(fileInfo) === group.label
+      )
+    },
+    isGroupOpen(group) {
+      return this.groupExpanded[group.key] === true
+    },
+    toggleGroup(group) {
+      this.groupExpanded[group.key] = !this.isGroupOpen(group)
+    },
     async init() {
       await this.fetchLogs()
     },
@@ -129,7 +177,7 @@ export function createGolViewer() {
         return
       }
 
-      document.getElementById('files')?.scroll(0, 0)
+      document.getElementById('file-groups')?.scroll(0, 0)
       this.results.file_paths = this.results.file_paths_backup.filter((fileInfo) =>
         matchesFileQuery(query, fileInfo)
       )
