@@ -1,6 +1,6 @@
 services:
   gol:
-    image: ghcr.io/vitalitty/gol:local
+    image: ghcr.io/vitalitty/gol:latest
     container_name: gol
     restart: unless-stopped
     env_file:
