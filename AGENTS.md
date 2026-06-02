@@ -10,7 +10,7 @@
 
 ## Build Workflow
 
-- Expected local toolchain: Go 1.26.3 and Node.js 24 LTS.
+- Expected local toolchain: Go 1.26.4 and Node.js 24 LTS.
 - Regenerate frontend assets before Go embed builds:
   - `cd frontend`
   - `npm ci`

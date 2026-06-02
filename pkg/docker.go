@@ -11,16 +11,12 @@ import (
 	"strings"
 
 	"github.com/acarl005/stripansi"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 )
 
 func newDockerClient() (*client.Client, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return nil, fmt.Errorf("create Docker client: %w", err)
-	}
-	return cli, nil
+	return client.New(client.FromEnv)
 }
 
 func closeDockerClient(cli *client.Client) {
@@ -36,7 +32,11 @@ func ListDockerContainers() ([]container.Summary, error) {
 	}
 	defer closeDockerClient(cli)
 
-	return cli.ContainerList(context.Background(), container.ListOptions{})
+	containers, err := cli.ContainerList(context.Background(), client.ContainerListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return containers.Items, nil
 }
 
 func ContainerStdoutToTmp(containerID string) *os.File {
@@ -47,7 +47,7 @@ func ContainerStdoutToTmp(containerID string) *os.File {
 	}
 	defer closeDockerClient(cli)
 
-	options := container.LogsOptions{ShowStdout: true, ShowStderr: true}
+	options := client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true}
 	out, err := cli.ContainerLogs(context.Background(), containerID, options)
 	if err != nil {
 		slog.Error("getting container logs", "containerID", containerID, "error", err)
@@ -101,18 +101,18 @@ func ContainerLogsFromFile(containerID string, query string, ignorePattern strin
 	}
 
 	countCmd := []string{"sh", "-c", fmt.Sprintf("wc -l < %s", filePath)}
-	countExecConfig := container.ExecOptions{
+	countExecConfig := client.ExecCreateOptions{
 		Cmd:          countCmd,
 		AttachStdout: true,
 		AttachStderr: true,
 	}
 
-	countExecIDResp, err := cli.ContainerExecCreate(context.Background(), containerID, countExecConfig)
+	countExecIDResp, err := cli.ExecCreate(context.Background(), containerID, countExecConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create exec instance for counting lines: %w", err)
 	}
 
-	countResp, err := cli.ContainerExecAttach(context.Background(), countExecIDResp.ID, container.ExecStartOptions{})
+	countResp, err := cli.ExecAttach(context.Background(), countExecIDResp.ID, client.ExecAttachOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to attach to exec instance for counting lines: %w", err)
 	}
@@ -134,18 +134,18 @@ func ContainerLogsFromFile(containerID string, query string, ignorePattern strin
 		cmd = []string{"sh", "-c", fmt.Sprintf("tail -n +%d %s | head -n %d", startLine+1, filePath, pageSize)}
 	}
 
-	execConfig := container.ExecOptions{
+	execConfig := client.ExecCreateOptions{
 		Cmd:          cmd,
 		AttachStdout: true,
 		AttachStderr: true,
 	}
 
-	execIDResp, err := cli.ContainerExecCreate(context.Background(), containerID, execConfig)
+	execIDResp, err := cli.ExecCreate(context.Background(), containerID, execConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create exec instance: %w", err)
 	}
 
-	resp, err := cli.ContainerExecAttach(context.Background(), execIDResp.ID, container.ExecStartOptions{})
+	resp, err := cli.ExecAttach(context.Background(), execIDResp.ID, client.ExecAttachOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to attach to exec instance: %w", err)
 	}
@@ -209,19 +209,19 @@ func GetContainerFileInfos(pattern string, limit int, containerID string) []File
 	}
 	defer closeDockerClient(cli)
 
-	execConfig := container.ExecOptions{
+	execConfig := client.ExecCreateOptions{
 		Cmd:          []string{"sh", "-c", fmt.Sprintf("ls -1 %s", pattern)},
 		AttachStdout: true,
 		AttachStderr: true,
 	}
 
-	execIDResp, err := cli.ContainerExecCreate(context.Background(), containerID, execConfig)
+	execIDResp, err := cli.ExecCreate(context.Background(), containerID, execConfig)
 	if err != nil {
 		slog.Error("Failed to create exec instance", "containerID", containerID, "error", err)
 		return nil
 	}
 
-	resp, err := cli.ContainerExecAttach(context.Background(), execIDResp.ID, container.ExecStartOptions{})
+	resp, err := cli.ExecAttach(context.Background(), execIDResp.ID, client.ExecAttachOptions{})
 	if err != nil {
 		slog.Error("Failed to attach to exec instance", "containerID", containerID, "error", err)
 		return nil
@@ -255,7 +255,7 @@ func GetContainerFileInfos(pattern string, limit int, containerID string) []File
 			LinesCount: linesCount,
 			FileSize:   fileSize,
 			Type:       TypeDocker,
-			Host:       containerID[:12],
+			Host:       containerID,
 		})
 	}
 
@@ -263,18 +263,18 @@ func GetContainerFileInfos(pattern string, limit int, containerID string) []File
 }
 
 func getFileStatsFromContainer(cli *client.Client, containerID string, filePath string) (int, int64, error) {
-	execConfig := container.ExecOptions{
+	execConfig := client.ExecCreateOptions{
 		Cmd:          []string{"wc", "-l", filePath},
 		AttachStdout: true,
 		AttachStderr: true,
 	}
 
-	execIDResp, err := cli.ContainerExecCreate(context.Background(), containerID, execConfig)
+	execIDResp, err := cli.ExecCreate(context.Background(), containerID, execConfig)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to create exec instance for wc: %w", err)
 	}
 
-	resp, err := cli.ContainerExecAttach(context.Background(), execIDResp.ID, container.ExecStartOptions{})
+	resp, err := cli.ExecAttach(context.Background(), execIDResp.ID, client.ExecAttachOptions{})
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to attach to exec instance for wc: %w", err)
 	}
@@ -289,18 +289,18 @@ func getFileStatsFromContainer(cli *client.Client, containerID string, filePath 
 		return 0, 0, fmt.Errorf("reading wc output: %w", err)
 	}
 
-	execConfig = container.ExecOptions{
+	execConfig = client.ExecCreateOptions{
 		Cmd:          []string{"stat", "-c", "%s", filePath},
 		AttachStdout: true,
 		AttachStderr: true,
 	}
 
-	execIDResp, err = cli.ContainerExecCreate(context.Background(), containerID, execConfig)
+	execIDResp, err = cli.ExecCreate(context.Background(), containerID, execConfig)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to create exec instance for stat: %w", err)
 	}
 
-	resp, err = cli.ContainerExecAttach(context.Background(), execIDResp.ID, container.ExecStartOptions{})
+	resp, err = cli.ExecAttach(context.Background(), execIDResp.ID, client.ExecAttachOptions{})
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to attach to exec instance for stat: %w", err)
 	}

@@ -157,7 +157,7 @@ New embedded integrations should import `github.com/Vitalitty/gol`.
 
 Prerequisites:
 
-- Go 1.26.3
+- Go 1.26.4
 - Node.js 24 LTS
 - npm, using the checked-in lockfile with `npm ci`
 
