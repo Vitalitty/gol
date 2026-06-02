@@ -16,7 +16,7 @@ import (
 )
 
 func newDockerClient() (*client.Client, error) {
-	return client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	return client.New(client.FromEnv)
 }
 
 func closeDockerClient(cli *client.Client) {
