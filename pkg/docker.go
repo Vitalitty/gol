@@ -16,11 +16,7 @@ import (
 )
 
 func newDockerClient() (*client.Client, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return nil, fmt.Errorf("create Docker client: %w", err)
-	}
-	return cli, nil
+	return client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 }
 
 func closeDockerClient(cli *client.Client) {
