@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -78,41 +79,42 @@ func (h *APIHandler) Get(c echo.Context) error {
 	if !ok {
 		return echo.NewHTTPError(http.StatusNotFound, "file not found")
 	}
-	req.FilePath = fileInfo.FilePath
-	req.Type = fileInfo.Type
-	req.Host = fileInfo.Host
-	req.SourceID = fileInfo.SourceID
 
 	var watcher *Watcher
-	if req.Type == TypeDocker {
-		if !strings.HasPrefix(req.FilePath, TmpContainerPath) {
-			result, err := ContainerLogsFromFile(req.Host, req.Query, req.Ignore, req.FilePath, req.Page, req.PerPage, req.Reverse)
+	if fileInfo.Type == TypeDocker {
+		if !strings.HasPrefix(fileInfo.FilePath, TmpContainerPath) {
+			result, err := ContainerLogsFromFile(fileInfo.Host, req.Query, req.Ignore, fileInfo.FilePath, req.Page, req.PerPage, req.Reverse)
 			if err != nil {
 				return echo.NewHTTPError(http.StatusInternalServerError, err)
 			}
-			result.Type = req.Type
+			result.Type = fileInfo.Type
+			result.Host = fileInfo.Host
+			result.SourceID = fileInfo.SourceID
 			return c.JSON(http.StatusOK, APIResponse{
 				Result:    *result,
 				FilePaths: state.FilePaths,
 			})
 		}
 
-		watcher, err = NewWatcher(req.FilePath, req.Query, req.Ignore, false, "", "", "", "", "")
+		watcher, err = newWatcherFromFileInfo(fileInfo, req.Query, req.Ignore, nil)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err)
 		}
 	}
 
-	if req.Type == TypeSSH {
-		sshConfig, ok := state.FindSSHConfig(req.SourceID, req.Host)
+	if fileInfo.Type == TypeSSH {
+		sshConfig, ok := state.FindSSHConfig(fileInfo.SourceID, fileInfo.Host)
 		if !ok {
 			return echo.NewHTTPError(http.StatusNotFound, "ssh config not found")
 		}
 		config := sshConfig.toSSHConfig()
-		watcher = newWatcher(req.FilePath, req.Query, req.Ignore, true, &config)
+		watcher, err = newWatcherFromFileInfo(fileInfo, req.Query, req.Ignore, &config)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err)
+		}
 	}
-	if req.Type == TypeFile || req.Type == TypeStdin {
-		watcher, err = NewWatcher(req.FilePath, req.Query, req.Ignore, false, "", "", "", "", "")
+	if fileInfo.Type == TypeFile || fileInfo.Type == TypeStdin {
+		watcher, err = newWatcherFromFileInfo(fileInfo, req.Query, req.Ignore, nil)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err)
 		}
@@ -128,12 +130,26 @@ func (h *APIHandler) Get(c echo.Context) error {
 	if result == nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "scan result is empty")
 	}
-	result.Type = req.Type
-	result.Host = req.Host
-	result.SourceID = req.SourceID
+	result.Type = fileInfo.Type
+	result.Host = fileInfo.Host
+	result.SourceID = fileInfo.SourceID
 
 	return c.JSON(http.StatusOK, APIResponse{
 		Result:    *result,
 		FilePaths: state.FilePaths,
 	})
+}
+
+func newWatcherFromFileInfo(fileInfo FileInfo, query string, ignore string, sshConfig *SSHConfig) (*Watcher, error) {
+	switch fileInfo.Type {
+	case TypeSSH:
+		if sshConfig == nil {
+			return nil, fmt.Errorf("ssh config is required")
+		}
+		return newWatcher(fileInfo.FilePath, query, ignore, true, sshConfig), nil
+	case TypeFile, TypeStdin, TypeDocker:
+		return NewWatcher(fileInfo.FilePath, query, ignore, false, "", "", "", "", "")
+	default:
+		return nil, fmt.Errorf("unsupported type: %s", fileInfo.Type)
+	}
 }
