@@ -52,22 +52,13 @@ function matchesFileQuery(query, fileInfo) {
   const needle = String(query ?? '').trim().toLowerCase()
   if (needle === '') return true
 
-  if (fileInfo.type === 'docker') {
-    const fields = [fileInfo.type, fileInfo.host, fileInfo.name]
-    if (!String(fileInfo.file_path ?? '').startsWith('/tmp/GOL-')) {
-      fields.push(fileInfo.file_path)
-    }
-    return fields.some((field) => String(field ?? '').toLowerCase().includes(needle))
+  const filePath = String(fileInfo.file_path ?? '')
+  if (fileInfo.type === 'stdin' || filePath.startsWith('/tmp/GOL-')) {
+    return false
   }
 
-  const fields = [fileInfo.type]
-  if (fileInfo.type !== 'stdin') {
-    fields.push(fileInfo.file_path)
-  }
-  if (fileInfo.type === 'file') fields.push(fileSourceLabel(fileInfo))
-  if (fileInfo.type === 'ssh') fields.push(fileInfo.host)
-
-  return fields.some((field) => String(field ?? '').toLowerCase().includes(needle))
+  const fileName = filePath.split(/[\\/]/).pop()
+  return [fileName, filePath].some((field) => String(field ?? '').toLowerCase().includes(needle))
 }
 
 function fileSourceLabel(fileInfo) {
@@ -91,6 +82,7 @@ function defaultResult() {
     total: 0,
     file_path: '',
     host: '',
+    source_id: '',
     type: ''
   }
 }
@@ -107,6 +99,7 @@ export function createGolViewer() {
       realtime: true,
       reverse: true,
       host: '',
+      source_id: '',
       type: '',
       page: 1,
       per_page: 100,
@@ -184,6 +177,7 @@ export function createGolViewer() {
     },
     async fetchLogs() {
       this.input.host = this.input.host ?? ''
+      this.input.source_id = this.input.source_id ?? ''
       this.input.type = this.input.type ?? ''
       this.loading.error = ''
       this.loading.errorJSON = ''
@@ -196,6 +190,7 @@ export function createGolViewer() {
         per_page: this.input.per_page,
         file_path: this.input.file_path,
         host: this.input.host,
+        source_id: this.input.source_id,
         type: this.input.type,
         reverse: this.input.reverse
       })
@@ -237,6 +232,7 @@ export function createGolViewer() {
       this.results.result = result
       this.input.file_path = result.file_path ?? ''
       this.input.host = result.host ?? ''
+      this.input.source_id = result.source_id ?? ''
       this.input.type = result.type ?? ''
 
       this.manageRealtimeUpdates()

@@ -2,16 +2,13 @@ package pkg
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
-	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
-	"strings"
 	"sync"
 
 	"github.com/acarl005/stripansi"
-	"golang.org/x/crypto/ssh"
 )
 
 type Watcher struct {
@@ -19,9 +16,7 @@ type Watcher struct {
 	matchPattern  string
 	ignorePattern string
 	mutex         sync.Mutex
-	sshConfig     *ssh.ClientConfig
-	sshHost       string
-	sshPort       string
+	sshConfig     *SSHConfig
 	isRemote      bool
 }
 
@@ -36,38 +31,31 @@ func NewWatcher(
 	sshPassword string,
 	sshPrivateKeyPath string,
 ) (*Watcher, error) {
-	var authMethod ssh.AuthMethod
-	if sshPrivateKeyPath != "" {
-		key, err := os.ReadFile(sshPrivateKeyPath)
-		if err != nil {
-			return nil, err
+	var sshConfig *SSHConfig
+	if isRemote {
+		sshConfig = &SSHConfig{
+			Host:           sshHost,
+			Port:           sshPort,
+			User:           sshUser,
+			Password:       sshPassword,
+			PrivateKeyPath: sshPrivateKeyPath,
+			KnownHostsPath: filepath.Join(userHomeDir(), ".ssh", "known_hosts"),
 		}
-		signer, err := ssh.ParsePrivateKey(key)
-		if err != nil {
-			return nil, err
-		}
-		authMethod = ssh.PublicKeys(signer)
-	} else {
-		authMethod = ssh.Password(sshPassword)
 	}
 
+	return newWatcher(filePath, matchPattern, ignorePattern, isRemote, sshConfig), nil
+}
+
+func newWatcher(filePath string, matchPattern string, ignorePattern string, isRemote bool, sshConfig *SSHConfig) *Watcher {
 	watcher := &Watcher{
 		filePath:      filePath,
 		matchPattern:  matchPattern,
 		ignorePattern: ignorePattern,
 		isRemote:      isRemote,
-		sshHost:       sshHost,
-		sshPort:       sshPort,
-		sshConfig: &ssh.ClientConfig{
-			User: sshUser,
-			Auth: []ssh.AuthMethod{
-				authMethod,
-			},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(), // nolint:gosec
-		},
+		sshConfig:     sshConfig,
 	}
 
-	return watcher, nil
+	return watcher
 }
 
 type LineResult struct {
@@ -83,6 +71,7 @@ type LineResult struct {
 type ScanResult struct {
 	FilePath     string       `json:"file_path"`
 	Host         string       `json:"host"`
+	SourceID     string       `json:"source_id"`
 	Type         string       `json:"type"`
 	MatchPattern string       `json:"match_pattern"`
 	Total        int          `json:"total"`
@@ -111,7 +100,7 @@ func (w *Watcher) Scan(page, pageSize int, reverse bool) (*ScanResult, error) {
 	AppendGeneralInfo(&lines)
 	return &ScanResult{
 		FilePath:     w.filePath,
-		Host:         w.sshHost,
+		Host:         w.host(),
 		MatchPattern: w.matchPattern,
 		Total:        counts,
 		Lines:        lines,
@@ -157,27 +146,23 @@ func (w *Watcher) initializeScanner() (*os.File, *bufio.Scanner, error) {
 }
 
 func (w *Watcher) initializeRemoteScanner() (*os.File, *bufio.Scanner, error) {
-	sshConfig := SSHConfig{
-		Host: w.sshHost,
-		Port: w.sshPort,
+	if w.sshConfig == nil {
+		return nil, nil, os.ErrInvalid
 	}
-	session, err := NewSession(&sshConfig)
+
+	file, err := sshOpenFile(w.filePath, w.sshConfig)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer session.Close()
 
-	var b bytes.Buffer
-	session.Stdout = &b
-	if err := session.Run(fmt.Sprintf("cat %s", w.filePath)); err != nil {
-		if err.Error() != ErrorMsgSessionAlreadyStarted {
-			return nil, nil, err
-		}
+	return file, bufio.NewScanner(file), nil
+}
+
+func (w *Watcher) host() string {
+	if w.sshConfig == nil {
+		return ""
 	}
-
-	scanner := bufio.NewScanner(strings.NewReader(b.String()))
-
-	return nil, scanner, nil
+	return w.sshConfig.Host
 }
 
 func (w *Watcher) collectMatchingLines(scanner *bufio.Scanner) ([]LineResult, int, error) {

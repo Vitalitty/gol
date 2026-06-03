@@ -18,9 +18,15 @@ func TestNewAPIHandler(t *testing.T) {
 
 func TestAPIHandler_Get(t *testing.T) {
 	e := echo.New()
+	previous := SnapshotGlobalState()
+	t.Cleanup(func() {
+		setGlobalState(previous.FilePaths, previous.SSHConfigs)
+		globalStateMutex.Lock()
+		GlobalPipeTmpFilePath = previous.PipeTmpFilePath
+		globalStateMutex.Unlock()
+	})
 
-	// Set up global variables for testing
-	GlobalFilePaths = []FileInfo{
+	filePaths := []FileInfo{
 		{
 			FilePath:   "test.log",
 			LinesCount: 4,
@@ -28,7 +34,10 @@ func TestAPIHandler_Get(t *testing.T) {
 			Type:       TypeFile,
 		},
 	}
+	setGlobalState(filePaths, nil)
+	globalStateMutex.Lock()
 	GlobalPipeTmpFilePath = "temp.log"
+	globalStateMutex.Unlock()
 
 	// Create a temporary log file for testing
 	// nolint:goconst
@@ -36,9 +45,9 @@ func TestAPIHandler_Get(t *testing.T) {
 ERROR An error occurred
 INFO Service running
 ERROR Another error occurred`
-	err := os.WriteFile(GlobalFilePaths[0].FilePath, []byte(content), 0600)
+	err := os.WriteFile(filePaths[0].FilePath, []byte(content), 0600)
 	assert.NoError(t, err)
-	defer os.Remove(GlobalFilePaths[0].FilePath)
+	defer os.Remove(filePaths[0].FilePath)
 
 	// Create a test request
 	req := httptest.NewRequest(http.MethodGet, "/api?query=ERROR&page=1&per_page=10", nil)
@@ -53,6 +62,7 @@ ERROR Another error occurred`
 			"result": {
 				"file_path": "test.log",
 				"host": "",
+				"source_id": "",
 				"type": "file",
 				"match_pattern": "ERROR",
 				"total": 2,
@@ -84,6 +94,7 @@ ERROR Another error occurred`
 					"file_size": 0,
 					"type": "file",
 					"host": "",
+					"source_id": "",
 					"name": ""
 				}
 			]
@@ -94,9 +105,15 @@ ERROR Another error occurred`
 }
 func TestAPIHandler_Get404(t *testing.T) {
 	e := echo.New()
+	previous := SnapshotGlobalState()
+	t.Cleanup(func() {
+		setGlobalState(previous.FilePaths, previous.SSHConfigs)
+		globalStateMutex.Lock()
+		GlobalPipeTmpFilePath = previous.PipeTmpFilePath
+		globalStateMutex.Unlock()
+	})
 
-	// Set up global variables for testing
-	GlobalFilePaths = []FileInfo{
+	filePaths := []FileInfo{
 		{
 			FilePath:   "test.log",
 			LinesCount: 4,
@@ -104,16 +121,19 @@ func TestAPIHandler_Get404(t *testing.T) {
 			Type:       TypeFile,
 		},
 	}
+	setGlobalState(filePaths, nil)
+	globalStateMutex.Lock()
 	GlobalPipeTmpFilePath = "temp.log"
+	globalStateMutex.Unlock()
 
 	// nolint:goconst
 	content := `INFO Starting service
 	ERROR An error occurred
 	INFO Service running
 	ERROR Another error occurred`
-	err := os.WriteFile(GlobalFilePaths[0].FilePath, []byte(content), 0600)
+	err := os.WriteFile(filePaths[0].FilePath, []byte(content), 0600)
 	assert.NoError(t, err)
-	defer os.Remove(GlobalFilePaths[0].FilePath)
+	defer os.Remove(filePaths[0].FilePath)
 
 	handler := NewAPIHandler()
 
@@ -135,6 +155,82 @@ func TestAPIHandler_Get404(t *testing.T) {
 	c = e.NewContext(req, rec)
 	resp = handler.Get(c)
 
+	assert.Error(t, resp)
+	// nolint: errorlint
+	if he, ok := resp.(*echo.HTTPError); ok {
+		assert.Equal(t, http.StatusNotFound, he.Code)
+	} else {
+		assert.Fail(t, "response is not an HTTP error")
+	}
+}
+
+func TestAPIHandler_GetRejectsWrongHost(t *testing.T) {
+	e := echo.New()
+	previous := SnapshotGlobalState()
+	t.Cleanup(func() {
+		setGlobalState(previous.FilePaths, previous.SSHConfigs)
+	})
+
+	setGlobalState([]FileInfo{
+		{
+			FilePath:   "/var/log/app.log",
+			LinesCount: 4,
+			FileSize:   0,
+			Type:       TypeSSH,
+			Host:       "host-a",
+		},
+	}, []SSHPathConfig{{Host: "host-a", Port: "22", User: "user", SourceID: "ssh-a"}})
+
+	req := httptest.NewRequest(http.MethodGet, "/api?file_path=/var/log/app.log&type=ssh&host=host-b", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	resp := NewAPIHandler().Get(c)
+	assert.Error(t, resp)
+	// nolint: errorlint
+	if he, ok := resp.(*echo.HTTPError); ok {
+		assert.Equal(t, http.StatusNotFound, he.Code)
+	} else {
+		assert.Fail(t, "response is not an HTTP error")
+	}
+}
+
+func TestAPIHandler_GetSelectsSSHConfigBySourceID(t *testing.T) {
+	e := echo.New()
+	previous := SnapshotGlobalState()
+	t.Cleanup(func() {
+		setGlobalState(previous.FilePaths, previous.SSHConfigs)
+	})
+
+	setGlobalState(
+		[]FileInfo{
+			{FilePath: "/var/log/app.log", Type: TypeSSH, Host: "same-host", SourceID: "ssh-a"},
+			{FilePath: "/var/log/app.log", Type: TypeSSH, Host: "same-host", SourceID: "ssh-b"},
+		},
+		[]SSHPathConfig{
+			{Host: "same-host", Port: "22", User: "user-a", SourceID: "ssh-a"},
+			{Host: "same-host", Port: "2222", User: "user-b", SourceID: "ssh-b"},
+		},
+	)
+
+	state := SnapshotGlobalState()
+	fileInfo, ok := state.FindFileInfo("/var/log/app.log", TypeSSH, "same-host", "ssh-b")
+	if !ok {
+		t.Fatal("FindFileInfo did not find SSH file by source_id")
+	}
+	assert.Equal(t, "ssh-b", fileInfo.SourceID)
+
+	sshConfig, ok := state.FindSSHConfig(fileInfo.SourceID, fileInfo.Host)
+	if !ok {
+		t.Fatal("FindSSHConfig did not find SSH config by source_id")
+	}
+	assert.Equal(t, "2222", sshConfig.Port)
+
+	req := httptest.NewRequest(http.MethodGet, "/api?file_path=/var/log/app.log&type=ssh&host=same-host&source_id=ssh-missing", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	resp := NewAPIHandler().Get(c)
 	assert.Error(t, resp)
 	// nolint: errorlint
 	if he, ok := resp.(*echo.HTTPError); ok {

@@ -91,8 +91,10 @@ All patterns work in combination with each other.
 demsg | gol -f="/var/log/*.log"
 
 # over ssh
-# port optional (default 22), password optional (default ''), private_key optional (default $HOME/.ssh/id_rsa)
-gol -s="user@host[:port] [password=/path/to/password] [private_key=/path/to/key] /app/*logs"
+# port optional (default 22), choose either password= or private_key=
+# private_key defaults to $HOME/.ssh/id_rsa when password= is not used
+# key_passphrase works with private_key auth only, known_hosts defaults to $HOME/.ssh/known_hosts
+gol -s="user@host[:port] [password=password|private_key=/path/to/key] [key_passphrase=passphrase] [known_hosts=/path/to/known_hosts] /app/*logs"
 
 # Docker all container logs
 gol -d=""
@@ -106,9 +108,14 @@ gol -d="container-id /app/logs.log"
 # All patterns combined
 gol -d="container-id" \
     -d="container-id /app/logs.log" \
-    -s="user@host[:port] [password=/path/to/password] [private_key=/path/to/key] /app/*logs" \
+    -s="user@host[:port] [password=password|private_key=/path/to/key] [key_passphrase=passphrase] [known_hosts=/path/to/known_hosts] /app/*logs" \
     -f="/var/log/*.log"
 ```
+
+When using `GOL_SSH_TARGETS` in a `.env` file, quote the whole value if the
+passphrase contains `#` or other punctuation. Spaces inside `key_passphrase=`
+are not supported. Do not combine `password=` and `private_key=` in the same
+SSH target.
 
 ### Embed in GO
 

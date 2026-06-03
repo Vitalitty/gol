@@ -18,6 +18,7 @@ type FileInfo struct {
 	Name       string `json:"name"`
 	Type       string `json:"type"`
 	Host       string `json:"host"`
+	SourceID   string `json:"source_id"`
 }
 
 func NewAPIHandler() *APIHandler {
@@ -31,6 +32,7 @@ type APIRequest struct {
 	Ignore   string `json:"ignore" query:"ignore"`
 	FilePath string `json:"file_path" query:"file_path"`
 	Host     string `json:"host" query:"host"`
+	SourceID string `json:"source_id" query:"source_id"`
 	Type     string `json:"type" query:"type"`
 	Page     int    `json:"page" query:"page" default:"1" validate:"required,gte=1" message:"page >=1 is required"`
 	PerPage  int    `json:"per_page" query:"per_page" default:"15" validate:"required" message:"per_page is required"`
@@ -53,23 +55,33 @@ func (h *APIHandler) Get(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnprocessableEntity, msgs)
 	}
 
-	if len(GlobalFilePaths) == 0 {
+	state := SnapshotGlobalState()
+	if len(state.FilePaths) == 0 {
 		return echo.NewHTTPError(http.StatusNotFound, "filepath not found")
 	}
 
 	if req.FilePath == "" {
-		first := GlobalFilePaths[0]
+		first := state.FilePaths[0]
 		req.FilePath = first.FilePath
 		req.Host = first.Host
+		req.SourceID = first.SourceID
 		req.Type = first.Type
 	}
 	if req.FilePath != "" && req.Type == "" {
 		return echo.NewHTTPError(http.StatusUnprocessableEntity, "type and host are required")
 	}
+	if (req.Type == TypeDocker || req.Type == TypeSSH) && req.Host == "" {
+		return echo.NewHTTPError(http.StatusUnprocessableEntity, "type and host are required")
+	}
 
-	if !FilePathInGlobalFilePaths(req.FilePath) {
+	fileInfo, ok := state.FindFileInfo(req.FilePath, req.Type, req.Host, req.SourceID)
+	if !ok {
 		return echo.NewHTTPError(http.StatusNotFound, "file not found")
 	}
+	req.FilePath = fileInfo.FilePath
+	req.Type = fileInfo.Type
+	req.Host = fileInfo.Host
+	req.SourceID = fileInfo.SourceID
 
 	var watcher *Watcher
 	if req.Type == TypeDocker {
@@ -81,7 +93,7 @@ func (h *APIHandler) Get(c echo.Context) error {
 			result.Type = req.Type
 			return c.JSON(http.StatusOK, APIResponse{
 				Result:    *result,
-				FilePaths: GlobalFilePaths,
+				FilePaths: state.FilePaths,
 			})
 		}
 
@@ -92,14 +104,12 @@ func (h *APIHandler) Get(c echo.Context) error {
 	}
 
 	if req.Type == TypeSSH {
-		sshConfig := h.API.FindSSHConfig(req.Host)
-		if sshConfig == nil {
+		sshConfig, ok := state.FindSSHConfig(req.SourceID, req.Host)
+		if !ok {
 			return echo.NewHTTPError(http.StatusNotFound, "ssh config not found")
 		}
-		watcher, err = NewWatcher(req.FilePath, req.Query, req.Ignore, true, sshConfig.Host, sshConfig.Port, sshConfig.User, sshConfig.Password, sshConfig.PrivateKeyPath)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err)
-		}
+		config := sshConfig.toSSHConfig()
+		watcher = newWatcher(req.FilePath, req.Query, req.Ignore, true, &config)
 	}
 	if req.Type == TypeFile || req.Type == TypeStdin {
 		watcher, err = NewWatcher(req.FilePath, req.Query, req.Ignore, false, "", "", "", "", "")
@@ -120,9 +130,10 @@ func (h *APIHandler) Get(c echo.Context) error {
 	}
 	result.Type = req.Type
 	result.Host = req.Host
+	result.SourceID = req.SourceID
 
 	return c.JSON(http.StatusOK, APIResponse{
 		Result:    *result,
-		FilePaths: GlobalFilePaths,
+		FilePaths: state.FilePaths,
 	})
 }

@@ -8,10 +8,9 @@ func NewAPI() *API {
 }
 
 func (a *API) FindSSHConfig(host string) *SSHPathConfig {
-	for _, sshConfig := range GlobalPathSSHConfig {
-		if sshConfig.Host == host {
-			return &sshConfig
-		}
+	sshConfig, ok := SnapshotGlobalState().FindSSHConfig("", host)
+	if !ok {
+		return nil
 	}
-	return nil
+	return &sshConfig
 }

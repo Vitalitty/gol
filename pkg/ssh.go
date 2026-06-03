@@ -23,7 +23,7 @@ func NewSession(config *SSHConfig) (*ssh.Session, error) {
 }
 
 func NewOrReusableClient(config *SSHConfig) (*ssh.Client, error) {
-	key := config.Host + ":" + config.Port
+	key := sshClientKey(config)
 
 	clientMutex.Lock()
 	client := GlobalSSHClients[key]
@@ -50,4 +50,24 @@ func NewOrReusableClient(config *SSHConfig) (*ssh.Client, error) {
 	}
 
 	return client, nil
+}
+
+func removeCachedSSHClient(config *SSHConfig) {
+	key := sshClientKey(config)
+
+	clientMutex.Lock()
+	client := GlobalSSHClients[key]
+	delete(GlobalSSHClients, key)
+	clientMutex.Unlock()
+
+	if client != nil {
+		_ = client.Close()
+	}
+}
+
+func sshClientKey(config *SSHConfig) string {
+	if config.SourceID != "" {
+		return config.SourceID
+	}
+	return config.User + "@" + config.Host + ":" + config.Port
 }

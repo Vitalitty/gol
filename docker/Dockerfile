@@ -12,10 +12,7 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# Docker's Alpine patch tags can lag behind Go patch releases, so use the
-# latest Go 1.26 Alpine builder while go.mod keeps the exact toolchain version.
-FROM golang:1.26-alpine AS builder
-ENV GOTOOLCHAIN=auto
+FROM golang:1.26.4-alpine AS builder
 ARG VERSION=container
 WORKDIR /src
 

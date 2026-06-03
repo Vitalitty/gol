@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -13,6 +14,13 @@ var GlobalFilePaths []FileInfo
 var GlobalPipeTmpFilePath string
 var GlobalPathSSHConfig []SSHPathConfig
 var GlobalSSHClients = make(map[string]*ssh.Client)
+var globalStateMutex sync.RWMutex
+
+type GlobalStateSnapshot struct {
+	FilePaths       []FileInfo
+	PipeTmpFilePath string
+	SSHConfigs      []SSHPathConfig
+}
 
 func WatchFilePaths(seconds int64, filePaths SliceFlags, sshPaths SliceFlags, dockerPaths SliceFlags, limit int) {
 	interval := time.Duration(seconds) * time.Second
@@ -31,7 +39,9 @@ func HandleStdinPipe() {
 		slog.Error("creating temp file", "error", err)
 		return
 	}
+	globalStateMutex.Lock()
 	GlobalPipeTmpFilePath = tmpFile.Name()
+	globalStateMutex.Unlock()
 	go func(tmpFile *os.File) {
 		defer tmpFile.Close()
 		err := PipeLinesToTmp(tmpFile)
@@ -44,26 +54,30 @@ func HandleStdinPipe() {
 
 func UpdateGlobalFilePaths(filePaths SliceFlags, sshPaths SliceFlags, dockerPaths SliceFlags, limit int) {
 	fileInfos := []FileInfo{}
-	GlobalPathSSHConfig = nil
+	sshConfigs := []SSHPathConfig{}
 
 	for _, pattern := range filePaths {
 		fileInfo := GetFileInfos(pattern, limit, false, nil)
 		fileInfos = append(fileInfo, fileInfos...)
 	}
-	for _, pattern := range sshPaths {
+	for sourceIndex, pattern := range sshPaths {
 		sshFilePathConfig, err := StringToSSHPathConfig(pattern)
 		if err != nil {
 			slog.Error("parsing SSH path", "pattern", pattern, "error", err)
 			continue
 		}
+		sshFilePathConfig.SourceID = newSSHSourceID(sshFilePathConfig, sourceIndex)
 		sshConfig := SSHConfig{
-			Host:           sshFilePathConfig.Host,
-			Port:           sshFilePathConfig.Port,
-			User:           sshFilePathConfig.User,
-			Password:       sshFilePathConfig.Password,
-			PrivateKeyPath: sshFilePathConfig.PrivateKeyPath,
+			SourceID:             sshFilePathConfig.SourceID,
+			Host:                 sshFilePathConfig.Host,
+			Port:                 sshFilePathConfig.Port,
+			User:                 sshFilePathConfig.User,
+			Password:             sshFilePathConfig.Password,
+			PrivateKeyPath:       sshFilePathConfig.PrivateKeyPath,
+			PrivateKeyPassphrase: sshFilePathConfig.PrivateKeyPassphrase,
+			KnownHostsPath:       sshFilePathConfig.KnownHostsPath,
 		}
-		GlobalPathSSHConfig = append(GlobalPathSSHConfig, *sshFilePathConfig)
+		sshConfigs = append(sshConfigs, *sshFilePathConfig)
 		fileInfo := GetFileInfos(sshFilePathConfig.FilePath, limit, true, &sshConfig)
 		fileInfos = append(fileInfo, fileInfos...)
 	}
@@ -109,5 +123,66 @@ func UpdateGlobalFilePaths(filePaths SliceFlags, sshPaths SliceFlags, dockerPath
 		}
 	}
 
-	GlobalFilePaths = UniqueFileInfos(fileInfos)
+	setGlobalState(UniqueFileInfos(fileInfos), sshConfigs)
+}
+
+func setGlobalState(filePaths []FileInfo, sshConfigs []SSHPathConfig) {
+	globalStateMutex.Lock()
+
+	GlobalFilePaths = append([]FileInfo(nil), filePaths...)
+	GlobalPathSSHConfig = append([]SSHPathConfig(nil), sshConfigs...)
+	globalStateMutex.Unlock()
+
+	pruneSFTPOperationLocks(sshConfigs)
+}
+
+func SnapshotGlobalState() GlobalStateSnapshot {
+	globalStateMutex.RLock()
+	defer globalStateMutex.RUnlock()
+
+	return GlobalStateSnapshot{
+		FilePaths:       append([]FileInfo(nil), GlobalFilePaths...),
+		PipeTmpFilePath: GlobalPipeTmpFilePath,
+		SSHConfigs:      append([]SSHPathConfig(nil), GlobalPathSSHConfig...),
+	}
+}
+
+func (s GlobalStateSnapshot) FindFileInfo(filePath string, fileType string, host string, sourceID string) (FileInfo, bool) {
+	for _, fileInfo := range s.FilePaths {
+		if fileInfo.FilePath != filePath {
+			continue
+		}
+		if fileType == "" && host == "" {
+			return fileInfo, true
+		}
+		if fileType != "" && fileInfo.Type != fileType {
+			continue
+		}
+		if host != "" && fileInfo.Host != host {
+			continue
+		}
+		if sourceID != "" && fileInfo.SourceID != sourceID {
+			continue
+		}
+		if fileInfo.Host == host {
+			return fileInfo, true
+		}
+	}
+	return FileInfo{}, false
+}
+
+func (s GlobalStateSnapshot) FindSSHConfig(sourceID string, host string) (SSHPathConfig, bool) {
+	if sourceID != "" {
+		for _, sshConfig := range s.SSHConfigs {
+			if sshConfig.SourceID == sourceID && (host == "" || sshConfig.Host == host) {
+				return sshConfig, true
+			}
+		}
+	}
+	for _, sshConfig := range s.SSHConfigs {
+		if sshConfig.Host == host {
+			return sshConfig, true
+		}
+	}
+	return SSHPathConfig{}, false
 }

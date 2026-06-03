@@ -10,8 +10,6 @@ const (
 	TypeStdin  = "stdin"
 	TypeSSH    = "ssh"
 	TypeDocker = "docker"
-
-	ErrorMsgSessionAlreadyStarted = "ssh: session already started"
 )
 
 var (
