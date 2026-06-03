@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -161,6 +163,71 @@ func TestAPIHandler_Get404(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, he.Code)
 	} else {
 		assert.Fail(t, "response is not an HTTP error")
+	}
+}
+
+func TestAPIHandler_GetRejectsUnlistedAbsolutePath(t *testing.T) {
+	e := echo.New()
+	previous := SnapshotGlobalState()
+	t.Cleanup(func() {
+		setGlobalState(previous.FilePaths, previous.SSHConfigs)
+	})
+
+	dir := t.TempDir()
+	listedPath := filepath.Join(dir, "listed.log")
+	unlistedPath := filepath.Join(dir, "unlisted.log")
+	if err := os.WriteFile(listedPath, []byte("ERROR listed\n"), 0600); err != nil {
+		t.Fatalf("failed to write listed file: %v", err)
+	}
+	if err := os.WriteFile(unlistedPath, []byte("ERROR unlisted\n"), 0600); err != nil {
+		t.Fatalf("failed to write unlisted file: %v", err)
+	}
+
+	setGlobalState([]FileInfo{
+		{
+			FilePath:   listedPath,
+			LinesCount: 1,
+			Type:       TypeFile,
+		},
+	}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api?file_path="+url.QueryEscape(unlistedPath)+"&type=file", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	resp := NewAPIHandler().Get(c)
+	assert.Error(t, resp)
+	// nolint: errorlint
+	if he, ok := resp.(*echo.HTTPError); ok {
+		assert.Equal(t, http.StatusNotFound, he.Code)
+	} else {
+		assert.Fail(t, "response is not an HTTP error")
+	}
+}
+
+func TestAPIHandler_GetSamePathRequiresMatchingTypeAndHost(t *testing.T) {
+	previous := SnapshotGlobalState()
+	t.Cleanup(func() {
+		setGlobalState(previous.FilePaths, previous.SSHConfigs)
+	})
+
+	setGlobalState([]FileInfo{
+		{FilePath: "/var/log/app.log", Type: TypeFile, Host: ""},
+		{FilePath: "/var/log/app.log", Type: TypeSSH, Host: "host-a", SourceID: "ssh-a"},
+	}, []SSHPathConfig{{Host: "host-a", Port: "22", User: "user", SourceID: "ssh-a"}})
+
+	state := SnapshotGlobalState()
+	if fileInfo, ok := state.FindFileInfo("/var/log/app.log", TypeFile, "", ""); !ok || fileInfo.Type != TypeFile {
+		t.Fatalf("FindFileInfo did not resolve the local file entry: %+v", fileInfo)
+	}
+	if fileInfo, ok := state.FindFileInfo("/var/log/app.log", TypeSSH, "host-a", "ssh-a"); !ok || fileInfo.Type != TypeSSH {
+		t.Fatalf("FindFileInfo did not resolve the SSH file entry: %+v", fileInfo)
+	}
+	if _, ok := state.FindFileInfo("/var/log/app.log", TypeSSH, "host-b", "ssh-a"); ok {
+		t.Fatal("FindFileInfo matched SSH file with the wrong host")
+	}
+	if _, ok := state.FindFileInfo("/var/log/app.log", TypeDocker, "host-a", "ssh-a"); ok {
+		t.Fatal("FindFileInfo matched file with the wrong type")
 	}
 }
 
