@@ -14,6 +14,7 @@ require (
 	github.com/mileusna/useragent v1.3.5
 	github.com/moby/moby/api v1.54.2
 	github.com/moby/moby/client v0.4.1
+	github.com/pkg/sftp v1.13.10
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.52.0
 )
@@ -33,6 +34,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect

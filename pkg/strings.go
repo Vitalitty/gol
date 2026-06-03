@@ -20,13 +20,8 @@ const (
 	logLevelDebug   = "debug"
 )
 
-func FilePathInGlobalFilePaths(filePath string) bool {
-	for _, fileInfo := range GlobalFilePaths {
-		if fileInfo.FilePath == filePath {
-			return true
-		}
-	}
-	return false
+func FindGlobalFileInfo(filePath string, fileType string, host string) (FileInfo, bool) {
+	return SnapshotGlobalState().FindFileInfo(filePath, fileType, host, "")
 }
 
 // CleanString removes non-printable characters from a string

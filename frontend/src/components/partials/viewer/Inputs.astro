@@ -179,7 +179,7 @@
           <template x-for="(filepath, index) in groupFiles(group)">
             <li :class="{ 'shadow-2xl': filepath.file_path === results.result.file_path }">
               <div
-                @click="input.page=1; input.query='';input.line_from=0;input.line_upto=0;input.file_path = filepath.file_path; input.host = filepath.host;input.type = filepath.type; submit()"
+                @click="input.page=1; highlighter.line_from=0; highlighter.line_upto=0; input.file_path = filepath.file_path; input.host = filepath.host; input.source_id = filepath.source_id || ''; input.type = filepath.type; submit()"
                 class="flex items-center ps-2 m-1 rounded hover:bg-gray-800"
                 :class="{ 'bg-gray-800 border-gray-900': filepath.file_path === results.result.file_path }">
                 <label

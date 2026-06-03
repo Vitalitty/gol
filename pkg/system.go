@@ -37,18 +37,22 @@ func IsInputFromPipe() bool {
 
 func PipeLinesToTmp(tmpFile *os.File) error {
 	scanner := bufio.NewScanner(os.Stdin)
+	tmpFilePath := tmpFile.Name()
 
-	slog.Info("Temporary file created for stdin", "path", GlobalPipeTmpFilePath)
+	slog.Info("Temporary file created for stdin", "path", tmpFilePath)
 
-	linesCount, fileSize, err := FileStats(GlobalPipeTmpFilePath, false, nil)
+	linesCount, fileSize, err := FileStats(tmpFilePath, false, nil)
 	if err != nil {
-		slog.Error("creating FileInfo for temp file", "path", GlobalPipeTmpFilePath, "error", err)
+		slog.Error("creating FileInfo for temp file", "path", tmpFilePath, "error", err)
 		return err
 	}
-	tempFileInfo := FileInfo{FilePath: GlobalPipeTmpFilePath, LinesCount: linesCount, FileSize: fileSize, Type: TypeStdin}
+	tempFileInfo := FileInfo{FilePath: tmpFilePath, LinesCount: linesCount, FileSize: fileSize, Type: TypeStdin}
 
+	globalStateMutex.Lock()
 	GlobalFilePaths = append([]FileInfo{tempFileInfo}, GlobalFilePaths...)
-	slog.Info("Temporary file added to global file paths", "filePaths", GlobalFilePaths)
+	filePaths := append([]FileInfo(nil), GlobalFilePaths...)
+	globalStateMutex.Unlock()
+	slog.Info("Temporary file added to global file paths", "filePaths", filePaths)
 
 	return writeRollingScannerLines(scanner, tmpFile, maxTempLogLines)
 }
@@ -129,10 +133,11 @@ func HandleCltrC(f func()) {
 
 func Cleanup() {
 	paths := make(map[string]struct{})
-	if GlobalPipeTmpFilePath != "" {
-		paths[GlobalPipeTmpFilePath] = struct{}{}
+	state := SnapshotGlobalState()
+	if state.PipeTmpFilePath != "" {
+		paths[state.PipeTmpFilePath] = struct{}{}
 	}
-	for _, fileInfo := range GlobalFilePaths {
+	for _, fileInfo := range state.FilePaths {
 		if fileInfo.Type == TypeDocker && strings.HasPrefix(fileInfo.FilePath, TmpContainerPath) {
 			paths[fileInfo.FilePath] = struct{}{}
 		}

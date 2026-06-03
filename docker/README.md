@@ -95,15 +95,24 @@ docker run --rm \
 
 ## Run With SSH Logs
 
-Mount SSH keys read-only and reference the mounted key path:
+Mount SSH keys and `known_hosts` read-only, then reference the mounted paths.
+Generate a known-hosts entry before starting the container, for example:
+
+```sh
+ssh-keyscan -H example.com >> "$HOME/.ssh/known_hosts"
+```
 
 ```sh
 docker run --rm \
   -p 3003:3003 \
   -v "$HOME/.ssh:/home/gol/.ssh:ro" \
-  -e GOL_SSH_TARGETS="user@example.com private_key=/home/gol/.ssh/id_rsa /var/log/*.log" \
+  -e GOL_SSH_TARGETS="user@example.com private_key=/home/gol/.ssh/id_rsa key_passphrase=pa#ss.phrase known_hosts=/home/gol/.ssh/known_hosts /var/log/*.log" \
   ghcr.io/vitalitty/gol:latest
 ```
+
+Quote `GOL_SSH_TARGETS` in `.env` when `key_passphrase` contains `#`.
+Punctuation is supported, but spaces inside `key_passphrase=` are not.
+Use either `password=` or `private_key=` for a target; they cannot be combined.
 
 ## Docker Compose
 

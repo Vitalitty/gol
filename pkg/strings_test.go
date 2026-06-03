@@ -4,6 +4,34 @@ import (
 	"testing"
 )
 
+func TestFindGlobalFileInfo(t *testing.T) {
+	previous := SnapshotGlobalState()
+	t.Cleanup(func() {
+		setGlobalState(previous.FilePaths, previous.SSHConfigs)
+	})
+
+	setGlobalState([]FileInfo{
+		{FilePath: "/var/log/app.log", Type: TypeFile, Host: ""},
+		{FilePath: "/var/log/app.log", Type: TypeSSH, Host: "host-a"},
+		{FilePath: "/var/log/app.log", Type: TypeSSH, Host: "host-b"},
+	}, nil)
+
+	fileInfo, ok := FindGlobalFileInfo("/var/log/app.log", TypeSSH, "host-b")
+	if !ok {
+		t.Fatal("FindGlobalFileInfo did not find SSH file for host-b")
+	}
+	if fileInfo.Type != TypeSSH || fileInfo.Host != "host-b" {
+		t.Fatalf("FindGlobalFileInfo returned %+v, want SSH host-b", fileInfo)
+	}
+
+	if _, ok := FindGlobalFileInfo("/var/log/app.log", TypeSSH, "host-c"); ok {
+		t.Fatal("FindGlobalFileInfo matched the wrong SSH host")
+	}
+	if _, ok := FindGlobalFileInfo("/var/log/app.log", TypeDocker, "host-b"); ok {
+		t.Fatal("FindGlobalFileInfo matched the wrong file type")
+	}
+}
+
 func TestJudgeLogLevel(t *testing.T) {
 	tests := []struct {
 		line            string

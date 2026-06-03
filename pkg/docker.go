@@ -57,7 +57,7 @@ func ContainerStdoutToTmp(containerID string) *os.File {
 
 	// Check if tmpFile already exists in GlobalFilePaths for container ID previously by watcher
 	var tmpFile *os.File
-	for _, fileInfo := range GlobalFilePaths {
+	for _, fileInfo := range SnapshotGlobalState().FilePaths {
 		if fileInfo.Host == containerID[:12] && fileInfo.Type == TypeDocker && strings.HasPrefix(fileInfo.FilePath, TmpContainerPath) {
 			tmpFile, err = os.OpenFile(fileInfo.FilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 			if err != nil {
