@@ -38,7 +38,7 @@ gol_args=(
   "--open=false"
 )
 
-[[ -n "${GOL_BASE_URL:-}" ]] && gol_args+=("--base-url=${GOL_BASE_URL}")
+[[ -n "${GOL_BASE_URL:-}" && "${GOL_BASE_URL}" != "/" ]] && gol_args+=("--base-url=${GOL_BASE_URL}")
 [[ -n "${GOL_EVERY:-}" ]] && gol_args+=("--every=${GOL_EVERY}")
 [[ -n "${GOL_LIMIT:-}" ]] && gol_args+=("--limit=${GOL_LIMIT}")
 bool_enabled "${GOL_ACCESS:-}" && gol_args+=("--access")

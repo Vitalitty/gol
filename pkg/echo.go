@@ -25,7 +25,7 @@ type EchoOption func(*EchoOptions) error
 func NewEcho(opts ...EchoOption) error {
 	options := &EchoOptions{
 		Cors:      0,
-		BaseURL:   "/",
+		BaseURL:   "",
 		Host:      "localhost", // default host
 		Port:      3000,        // default port
 		Access:    false,
