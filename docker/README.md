@@ -29,6 +29,8 @@ Set these variables to generate `gol` flags:
 Any `docker run` arguments or Compose `command:` values are appended after the
 environment-generated flags.
 
+Leave `GOL_BASE_URL` empty when serving from the domain root.
+
 In `docker/.env`, use `\n` between repeated values because `.env` files are
 line-based:
 
