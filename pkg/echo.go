@@ -59,9 +59,11 @@ func SetupMiddlewares(e *echo.Echo) {
 }
 
 func SetupRoutes(e *echo.Echo, options *EchoOptions) {
-	e.GET(options.BaseURL+"", NewAssetsHandler(options.PublicDir, "dist", "index.html").Get)
-	e.GET(options.BaseURL+"favicon.ico", NewAssetsHandler(options.PublicDir, "dist", "favicon.ico").GetICO)
-	e.GET(options.BaseURL+"api", NewAPIHandler().Get)
+	g := e.Group(options.BaseURL)
+
+	g.GET("", NewAssetsHandler(options.PublicDir, "dist", "index.html").Get)
+	g.GET("/favicon.ico", NewAssetsHandler(options.PublicDir, "dist", "favicon.ico").GetICO)
+	g.GET("/api", NewAPIHandler().Get)
 }
 
 func SetupCors(e *echo.Echo, options *EchoOptions) {

@@ -27,6 +27,7 @@ type Flags struct {
 	access      bool
 	open        bool
 	version     bool
+	LogLevel    int
 }
 
 var f Flags
@@ -34,8 +35,8 @@ var f Flags
 var version = "dev"
 
 func main() {
-	pkg.SetupLoggingStdout(slog.LevelInfo)
 	flags()
+	pkg.SetupLoggingStdout(slog.Level(f.LogLevel))
 
 	if pkg.IsInputFromPipe() {
 		pkg.HandleStdinPipe()
@@ -112,7 +113,8 @@ func flags() {
 	flag.IntVar(&f.limit, "limit", 1000, "limit the number of files to read from the file path pattern")
 	flag.Int64Var(&f.cors, "cors", 0, "cors port to allow the api (for development)")
 	flag.BoolVar(&f.open, "open", true, "open browser on start")
-	flag.StringVar(&f.baseURL, "base-url", "/", "base url with slash")
+	flag.StringVar(&f.baseURL, "base-url", "", "base url with slash")
+	flag.IntVar(&f.LogLevel, "log-level", 0, "log level (0=info, -4=debug, 4=warn, 8=error)")
 
 	flag.Parse()
 	wantsVersion()
