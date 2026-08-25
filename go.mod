@@ -7,7 +7,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/gravwell/gravwell/v3 v3.8.80
 	github.com/kevincobain2000/go-human-uuid v0.0.0-20250111013532-45983a45892e
-	github.com/labstack/echo/v4 v4.15.2
+	github.com/labstack/echo/v4 v4.15.3
 	github.com/lmittmann/tint v1.1.3
 	github.com/mattn/go-isatty v0.0.22
 	github.com/mcuadros/go-defaults v1.2.0
