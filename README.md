@@ -184,7 +184,6 @@ npm run dev
 # Frontend development on http://localhost:4321/
 ```
 
-`npm audit --omit=dev` should remain clean. A full `npm audit` can report a
-dev-only advisory through `@astrojs/check` and its language-server YAML
-dependency chain; keep `@astrojs/check` current and reassess when upstream
-publishes a compatible fix.
+`npm audit --omit=dev` should remain clean and is enforced by CI. Dependabot
+tracks advisories in the frontend development toolchain separately so existing
+build-only advisories do not block unrelated dependency updates.
