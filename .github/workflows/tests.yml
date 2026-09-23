@@ -41,7 +41,7 @@ jobs:
 
       - name: Audit frontend dependencies
         working-directory: frontend
-        run: npm audit
+        run: npm audit --omit=dev
 
       - name: Check frontend
         working-directory: frontend

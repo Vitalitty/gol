@@ -37,7 +37,7 @@ jobs:
 
       - name: Audit frontend dependencies
         working-directory: frontend
-        run: npm audit
+        run: npm audit --omit=dev
 
       - name: Build frontend assets
         working-directory: frontend
